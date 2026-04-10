@@ -2,7 +2,7 @@
 
 function printHelp() {
 	cat <<EOF
-Usage: hyprfreeze (-a | -p <pid> | -n <name>) [options]
+Usage: hyprfreeze (-a | -p <pid> | -n <name> | -c <command>) [options]
 
 Utility to suspend a game process (and other programs) in Wayland compositors.
 
@@ -14,6 +14,7 @@ Options:
   -a, --active          toggle suspend by active window
   -p, --pid             toggle suspend by process id
   -n, --name            toggle suspend by process name/command
+  -c, --custom          toggle suspend by custom command (outputs a PID)
 
   -s, --silent          don't send notification
   -t, --notif-timeout   notification timeout in milliseconds (default 5000)
@@ -131,7 +132,19 @@ function getPidByActive() {
       PID=$(niri msg --json focused-window | jq '.pid')
       ;;
     *)
-      echo "Detecting the active window is currently not supported on $DESKTOP."
+      echo "Detecting the active window is currently not supported on: $DESKTOP"
+      echo ""
+      echo "You can use the custom command flag to specify how to get the PID:"
+      echo "  hyprfreeze -c "<command that outputs the PID>""
+      echo ""
+      echo "Example for niri compositor:"
+      echo "  hyprfreeze -c "niri msg --json focused-window | jq '.pid'""
+      echo ""
+      echo "Please consider opening an issue on GitHub so that it can be implemented officially, with:"
+      echo "  - Compositor name: $DESKTOP"
+      echo "  - Command to get focused window PID"
+      echo "  - Any other relevant information"
+      echo ""
       echo "Implemented compositors: hyprland, sway, niri"
       exit 1
       ;;
@@ -168,6 +181,36 @@ function getPidByName() {
   # Get last process if there are multiple
   PID=$(pidof "$1" | awk '{print $NF}')
   debugPrint "PID by name: $PID"
+}
+
+function getPidByCustom() {
+  debugPrint "Getting PID by custom command: $1"
+  
+  # Execute the custom command and capture output
+  local result
+  result=$(bash -c "$1" 2>/dev/null)
+  
+  if [ $? -ne 0 ]; then
+    echo "Custom command failed to execute: $1"
+    exit 1
+  fi
+  
+  # Extract PID (should be a number)
+  PID=$(echo "$result" | tr -d '[:space:]')
+  debugPrint "Raw output from custom command: $result"
+  debugPrint "Processed PID: $PID"
+  
+  # Validate PID is numeric
+  if ! [[ $PID == ?(-)+([[:digit:]]) ]]; then
+    echo "Custom command did not return a valid PID. Output was: $result"
+    exit 1
+  fi
+  
+  # Verify the process exists
+  if ! ps -p "$PID" &>/dev/null; then
+    echo "Custom command returned PID $PID, but no such process exists"
+    exit 1
+  fi
 }
 
 function detectEnvironment() {
@@ -214,8 +257,8 @@ function args() {
   local required_flag_count=0
 
   # Parse options
-  local options="hap:n:st:"
-  local long_options="help,active,pid:,name:,silent,notif-timeout:,dry-run,debug,no-xorg-workaround"
+  local options="hap:n:c:st:"
+  local long_options="help,active,pid:,name:,custom:,silent,notif-timeout:,dry-run,debug,no-xorg-workaround"
   local parsed_args
   parsed_args=$(getopt -o "$options" --long "$long_options" -n "$(basename "$0")" -- "$@")
 
@@ -239,6 +282,11 @@ function args() {
         ((required_flag_count++))
         shift
         NAME_FLAG="$1"
+        ;;
+      -c | --custom)
+        ((required_flag_count++))
+        shift
+        CUSTOM_FLAG="$1"
         ;;
       -s | --silent)
         SILENT=1
@@ -287,6 +335,8 @@ function main() {
     getPidByPid "$FLAG_PID"
   elif [ -n "$NAME_FLAG" ]; then
     getPidByName "$NAME_FLAG"
+  elif [ -n "$CUSTOM_FLAG" ]; then
+    getPidByCustom "$CUSTOM_FLAG"
   fi
 
   # Suspend or resume process
