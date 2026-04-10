@@ -140,12 +140,7 @@ function getPidByActive() {
       echo "Example for niri compositor:"
       echo "  wl-freeze -c "niri msg --json focused-window | jq '.pid'""
       echo ""
-      echo "Please consider opening an issue on GitHub so that it can be implemented officially, with:"
-      echo "  - Compositor name and how to detect it"
-      echo "  - Command to get focused window PID"
-      echo "  - Any other relevant information"
-      echo ""
-      echo "Implemented compositors: hyprland, sway, niri"
+      echo "Please consider opening an issue on GitHub so that it can be implemented natively"
       exit 1
       ;;
     *)
@@ -157,12 +152,7 @@ function getPidByActive() {
       echo "Example for niri compositor:"
       echo "  wl-freeze -c "niri msg --json focused-window | jq '.pid'""
       echo ""
-      echo "Please consider opening an issue on GitHub so that it can be implemented officially, with:"
-      echo "  - Compositor name: $DESKTOP"
-      echo "  - Command to get focused window PID"
-      echo "  - Any other relevant information"
-      echo ""
-      echo "Implemented compositors: hyprland, sway, niri"
+      echo "Please consider opening an issue on GitHub so that it can be implemented natively"
       exit 1
       ;;
   esac

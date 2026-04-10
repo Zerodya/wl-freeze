@@ -30,19 +30,7 @@ wl-freeze -c "niri msg --json focused-window | jq '.pid'"
 The command output must be the pid number and nothing else, like: `12345`.
 
 ### Adding support for new compositors
-If your compositor is not supported yet, please consider [opening an issue](https://github.com/Zerodya/wl-freeze/issues) so that it can be implemented officially, with:
-- Your compositor name
-- Your distro
-- Output of:
-    ```sh
-    loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Desktop
-    ```
-    ```sh
-    echo $XDG_SESSION_DESKTOP
-    ```
-- The command to get the focused window PID
-- If the mouse input works in other XWayland apps like Discord when pausing XWayland games
-- Any other issues or relevant info
+If your compositor is not supported yet, please consider [opening an issue](https://github.com/Zerodya/wl-freeze/issues) and fill the template so that it can be implemented natively. Thank you!
 
 ## Dependencies
 - `jq` to parse JSON
