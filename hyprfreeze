@@ -2,9 +2,11 @@
 
 function printHelp() {
 	cat <<EOF
-Usage: hyprfreeze (-a | -p <pid> | -n <name> | -r) [options]
+Usage: hyprfreeze (-a | -p <pid> | -n <name>) [options]
 
-Utility to suspend a game process (and other programs) in Hyprland.
+Utility to suspend a game process (and other programs) in Wayland compositors.
+
+Supported compositors: hyprland, sway, niri
 
 Options:
   -h, --help            show help message
@@ -12,7 +14,6 @@ Options:
   -a, --active          toggle suspend by active window
   -p, --pid             toggle suspend by process id
   -n, --name            toggle suspend by process name/command
-  -r, --prop            toggle suspend by clicking on window (hyprprop must be installed)
 
   -s, --silent          don't send notification
   -t, --notif-timeout   notification timeout in milliseconds (default 5000)
@@ -37,36 +38,50 @@ function releaseMouseCapture() {
   
   debugPrint "Attempting to release mouse capture for XWayland..."
   
-  # Get the active window info
+  # Get the active window info based on compositor
   local active_win
-  active_win=$(hyprctl activewindow -j)
+  local is_xwayland="false"
   
-  # Check if the window we're about to pause is XWayland
-  local is_xwayland
-  is_xwayland=$(echo "$active_win" | jq -r '.xwayland')
-  debugPrint "Is XWayland window: $is_xwayland"
-  
-  # If it's an XWayland window, use workspace switching to release mouse capture
-  if [[ "$is_xwayland" == "true" ]]; then
-    debugPrint "XWayland window detected - using workspace switching to release mouse capture..."
-    
-    # Get the current workspace
-    local current_ws
-    current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
-    debugPrint "Current workspace: $current_ws"
-    
-    # Find another workspace to switch to briefly
-    local other_workspace
-    other_workspace=$(hyprctl workspaces -j | jq -r '.[] | select(.id != '"$current_ws"') | .id' | head -1)
-    
-    if [ -n "$other_workspace" ]; then
-      debugPrint "Switching to workspace $other_workspace and back to release mouse capture..."
-      hyprctl dispatch workspace "$other_workspace"
-      hyprctl dispatch workspace "$current_ws"
-    else
-      debugPrint "No other workspace found, cannot release mouse capture via workspace switching"
-    fi
-  fi
+  case "$DESKTOP" in
+    hyprland)
+      active_win=$(hyprctl activewindow -j)
+      is_xwayland=$(echo "$active_win" | jq -r '.xwayland')
+      debugPrint "Is XWayland window: $is_xwayland"
+      
+      # If it's an XWayland window, use workspace switching to release mouse capture
+      if [[ "$is_xwayland" == "true" ]]; then
+        debugPrint "XWayland window detected - using workspace switching to release mouse capture..."
+        
+        # Get the current workspace
+        local current_ws
+        current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+        debugPrint "Current workspace: $current_ws"
+        
+        # Find another workspace to switch to briefly
+        local other_workspace
+        other_workspace=$(hyprctl workspaces -j | jq -r '.[] | select(.id != '"$current_ws"') | .id' | head -1)
+        
+        if [ -n "$other_workspace" ]; then
+          debugPrint "Switching to workspace $other_workspace and back to release mouse capture..."
+          hyprctl dispatch workspace "$other_workspace"
+          hyprctl dispatch workspace "$current_ws"
+        else
+          debugPrint "No other workspace found, cannot release mouse capture via workspace switching"
+        fi
+      fi
+      ;;
+    sway)
+      # Sway doesn't have the same XWayland mouse capture issue as Hyprland in the same way
+      debugPrint "Sway detected - no XWayland mouse capture workaround implemented"
+      ;;
+    niri)
+      # Niri doesn't have the same XWayland mouse capture issue as Hyprland
+      debugPrint "Niri detected - no XWayland mouse capture workaround implemented"
+      ;;
+    *)
+      debugPrint "Compositor $DESKTOP not implemented for XWayland workaround"
+      ;;
+  esac
 }
 
 function toggleFreeze() {
@@ -104,7 +119,24 @@ function toggleFreeze() {
 
 function getPidByActive() {
   debugPrint "Getting PID by active window..."
-  PID=$(hyprctl activewindow -j | jq '.pid')
+  
+  case "$DESKTOP" in
+    hyprland)
+      PID=$(hyprctl activewindow -j | jq '.pid')
+      ;;
+    sway)
+      PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
+      ;;
+    niri)
+      PID=$(niri msg --json focused-window | jq '.pid')
+      ;;
+    *)
+      echo "Detecting the active window is currently not supported on $DESKTOP."
+      echo "Implemented compositors: hyprland, sway, niri"
+      exit 1
+      ;;
+  esac
+  
   debugPrint "PID by active window: $PID"
 
   # Die if PID is not numeric (e.g. "null" if there is no active window)
@@ -138,15 +170,31 @@ function getPidByName() {
   debugPrint "PID by name: $PID"
 }
 
-function getPidByProp() {
-  debugPrint "Getting PID by prop..."
-  if ! command -v hyprprop >/dev/null; then
-    echo "You need to install 'hyprprop' to use this feature. (https://github.com/vilari-mickopf/hyprprop)"
-    exit 1
+function detectEnvironment() {
+  if [ $(command -v loginctl) ]; then
+    local Desktop
+    eval "$(loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Desktop)"
+    DESKTOP=$Desktop
   fi
 
-  PID=$(hyprprop | jq '.pid')
-  debugPrint "PID by prop: $PID"
+  if [ -z "$DESKTOP" ]; then
+    DESKTOP=$XDG_SESSION_DESKTOP
+  fi
+
+  if [ -z "$DESKTOP" ]; then
+    debugPrint "Could not determine desktop environment via \`loginctl\`, and XDG_SESSION_DESKTOP is not set. Assuming Hyprland."
+    DESKTOP="hyprland"
+  fi
+
+  # Enforce lowercase for consistent matching
+  DESKTOP="${DESKTOP,,}"
+
+  # Normalize UWSM desktop names
+  if [[ "$DESKTOP" == *-uwsm ]]; then
+    DESKTOP="${DESKTOP%-uwsm}"
+  fi
+
+  debugPrint "Desktop: $DESKTOP"
 }
 
 function sendNotification() {
@@ -166,8 +214,8 @@ function args() {
   local required_flag_count=0
 
   # Parse options
-  local options="hap:n:rst:"
-  local long_options="help,active,pid:,name:,prop,silent,notif-timeout:,dry-run,debug,no-xorg-workaround"
+  local options="hap:n:st:"
+  local long_options="help,active,pid:,name:,silent,notif-timeout:,dry-run,debug,no-xorg-workaround"
   local parsed_args
   parsed_args=$(getopt -o "$options" --long "$long_options" -n "$(basename "$0")" -- "$@")
 
@@ -191,10 +239,6 @@ function args() {
         ((required_flag_count++))
         shift
         NAME_FLAG="$1"
-        ;;
-      -r | --prop)
-        ((required_flag_count++))
-        FLAG_PROP=true
         ;;
       -s | --silent)
         SILENT=1
@@ -232,6 +276,10 @@ function args() {
 
 function main() {
   debugPrint "Starting main function..."
+  
+  # Detect the compositor first
+  detectEnvironment
+  
   # Get pid by a required flag
   if [ "$FLAG_ACTIVE" = true ]; then
     getPidByActive
@@ -239,8 +287,6 @@ function main() {
     getPidByPid "$FLAG_PID"
   elif [ -n "$NAME_FLAG" ]; then
     getPidByName "$NAME_FLAG"
-  elif [ "$FLAG_PROP" = true ]; then
-    getPidByProp
   fi
 
   # Suspend or resume process
