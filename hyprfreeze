@@ -336,12 +336,10 @@ function args() {
 
 function main() {
   debugPrint "Starting main function..."
-  
-  # Detect the compositor first
-  detectEnvironment
-  
+
   # Get pid by a required flag
   if [ "$FLAG_ACTIVE" = true ]; then
+    detectEnvironment
     getPidByActive
   elif [ -n "$FLAG_PID" ]; then
     getPidByPid "$FLAG_PID"
