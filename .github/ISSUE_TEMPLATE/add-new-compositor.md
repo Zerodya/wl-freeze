@@ -14,7 +14,7 @@ assignees: ''
 **Environment:**
 First command:
 ```sh
-loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Desktop
+loginctl show-session "$(loginctl | grep "$(whoami)" | awk '{print $1}' | head -1)" -p Desktop
 ```
 My output:
 ```
