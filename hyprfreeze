@@ -131,6 +131,23 @@ function getPidByActive() {
     niri)
       PID=$(niri msg --json focused-window | jq '.pid')
       ;;
+    "")
+      echo "Could not detect the compositor."
+      echo ""
+      echo "You can use the custom command flag to specify how to get the PID:"
+      echo "  wl-freeze -c "<command that outputs the PID>""
+      echo ""
+      echo "Example for niri compositor:"
+      echo "  wl-freeze -c "niri msg --json focused-window | jq '.pid'""
+      echo ""
+      echo "Please consider opening an issue on GitHub so that it can be implemented officially, with:"
+      echo "  - Compositor name and how to detect it"
+      echo "  - Command to get focused window PID"
+      echo "  - Any other relevant information"
+      echo ""
+      echo "Implemented compositors: hyprland, sway, niri"
+      exit 1
+      ;;
     *)
       echo "Detecting the active window is currently not supported on: $DESKTOP"
       echo ""
@@ -222,11 +239,6 @@ function detectEnvironment() {
 
   if [ -z "$DESKTOP" ]; then
     DESKTOP=$XDG_SESSION_DESKTOP
-  fi
-
-  if [ -z "$DESKTOP" ]; then
-    debugPrint "Could not determine desktop environment via \`loginctl\`, and XDG_SESSION_DESKTOP is not set. Assuming Hyprland."
-    DESKTOP="hyprland"
   fi
 
   # Enforce lowercase for consistent matching
