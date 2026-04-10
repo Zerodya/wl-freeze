@@ -121,8 +121,11 @@ binds {
 # Pause game by process name
 wl-freeze -n eldenring.exe
 
-# Pause game using custom command (example for Niri)
+# Pause game using custom command to find the pid of the focused window (example for Niri)
 wl-freeze -c "niri msg --json focused-window | jq '.pid'"
+
+# Pause game by using your compositor window picker (example for Hyprland)
+wl-freeze -c "hyprprop | jq '.pid'"
 ```
 
 ## Known issues
