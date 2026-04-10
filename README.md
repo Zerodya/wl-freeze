@@ -37,7 +37,7 @@ If your compositor is not supported yet, please consider [opening an issue](http
 - `psmisc` contains `pstree` which is required to list child processes
 
 ### Optional
-- `notify-send` for desktop notifications
+- `libnotify` for desktop notifications
 
 ## Installation
 ### Arch Linux
