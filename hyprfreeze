@@ -2,7 +2,7 @@
 
 function printHelp() {
 	cat <<EOF
-Usage: hyprfreeze (-a | -p <pid> | -n <name> | -c <command>) [options]
+Usage: wl-freeze (-a | -p <pid> | -n <name> | -c <command>) [options]
 
 Utility to suspend a game process (and other programs) in Wayland compositors.
 
@@ -99,7 +99,7 @@ function toggleFreeze() {
   # Prevent suspending itself
   local pid_of_script=$$
   if echo "$PIDS" | grep -q "$pid_of_script"; then
-    echo "You are trying to suspend the hyprfreeze process."
+    echo "You are trying to suspend the wl-freeze process."
     exit 1
   fi
 
@@ -135,10 +135,10 @@ function getPidByActive() {
       echo "Detecting the active window is currently not supported on: $DESKTOP"
       echo ""
       echo "You can use the custom command flag to specify how to get the PID:"
-      echo "  hyprfreeze -c "<command that outputs the PID>""
+      echo "  wl-freeze -c "<command that outputs the PID>""
       echo ""
       echo "Example for niri compositor:"
-      echo "  hyprfreeze -c "niri msg --json focused-window | jq '.pid'""
+      echo "  wl-freeze -c "niri msg --json focused-window | jq '.pid'""
       echo ""
       echo "Please consider opening an issue on GitHub so that it can be implemented officially, with:"
       echo "  - Compositor name: $DESKTOP"
@@ -249,7 +249,7 @@ function sendNotification() {
 
   local message="PID $PID"
 
-  notify-send "${title}" "${message}" -t "$NOTIF_TIMEOUT" -a Hyprfreeze
+  notify-send "${title}" "${message}" -t "$NOTIF_TIMEOUT" -a wl-freeze
 }
 
 function args() {
