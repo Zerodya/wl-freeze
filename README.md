@@ -32,13 +32,6 @@ The command output must be the pid number and nothing else, like: `12345`.
 ### Adding support for new compositors
 If your compositor is not supported yet, please consider [opening an issue](https://github.com/Zerodya/wl-freeze/issues) and fill the template so that it can be implemented natively. Thank you!
 
-## Dependencies
-- `jq` to parse JSON
-- `psmisc` contains `pstree` which is required to list child processes
-
-### Optional
-- `libnotify` for desktop notifications
-
 ## Installation
 ### Arch Linux
 Available in the [AUR](https://aur.archlinux.org/packages/hyprfreeze-git). (Maintained by [Aethar](https://github.com/Aethar01)) **(update pending)**
@@ -47,13 +40,19 @@ Available in the [AUR](https://aur.archlinux.org/packages/hyprfreeze-git). (Main
 Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=hyprfreeze).  **(update pending)**
 
 ### Manual
+**Dependencies**
+- `jq` to parse JSON
+- `psmisc` contains `pstree` which is required to list child processes
+- `libnotify` for desktop notifications (Optional)
+
+**Symlink script**
+
 Clone this repo and symlink the `wl-freeze` script to a directory in your `PATH`:
 ```bash
 git clone https://github.com/Zerodya/wl-freeze.git
 ln -s $(pwd)/wl-freeze/wl-freeze $HOME/.local/bin
 ```
-
-Then install completions for your shell:
+**Shell Completions**
 
 <details><summary>Bash</summary>
 <p>
