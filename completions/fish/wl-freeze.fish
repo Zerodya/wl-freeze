@@ -1,0 +1,10 @@
+complete -c wl-freeze -s h -l help -d "show help message"
+complete -c wl-freeze -s a -l active -d "toggle suspend by active window"
+complete -c wl-freeze -s p -l pid -d "toggle suspend by process id" -x -a "(__fish_complete_pids)"
+complete -c wl-freeze -s n -l name -d "toggle suspend by process name/command" -x -a "(ps -e -o comm= | sort -u)"
+complete -c wl-freeze -s c -l custom -d "toggle suspend by custom command (outputs PID)" -x
+complete -c wl-freeze -s s -l silent -d "don't send notification"
+complete -c wl-freeze -s t -l notif-timeout -d "notification timeout in milliseconds (default 5000)" -x -a "1000 2000 3000 5000 10000"
+complete -c wl-freeze -l dry-run -d "doesn't actually suspend/resume a process"
+complete -c wl-freeze -l debug -d "enable debug mode"
+complete -c wl-freeze -l no-xorg-workaround -d "skip the XWayland mouse capture workaround"

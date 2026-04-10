@@ -1,4 +1,4 @@
-_hyprfreeze()
+_wl_freeze()
 {
     local cur prev words cword
     _init_completion || return
@@ -14,6 +14,10 @@ _hyprfreeze()
             COMPREPLY=($(compgen -W "$(ps -e --no-headers -o comm | sort -u | tr '\n' ' ')" -- "$cur"))
             return
             ;;
+        -c|--custom)
+            # No completion for custom command - user provides their own
+            return
+            ;;
         -t|--notif-timeout)
             # Complete with common timeout values
             COMPREPLY=($(compgen -W "1000 2000 3000 5000 10000" -- "$cur"))
@@ -22,12 +26,12 @@ _hyprfreeze()
     esac
 
     if [[ $cur == -* ]]; then
-        COMPREPLY=($(compgen -W "-h --help -a --active -p --pid -n --name -r --prop \
+        COMPREPLY=($(compgen -W "-h --help -a --active -p --pid -n --name -c --custom \
             -s --silent -t --notif-timeout --dry-run --debug --no-xorg-workaround" -- "$cur"))
     else
-        # When no option is specified, complete with options
-        COMPREPLY=($(compgen -W "-a -p -n -r" -- "$cur"))
+        # When no option is specified, suggest main operation flags
+        COMPREPLY=($(compgen -W "-a -p -n -c" -- "$cur"))
     fi
 }
 
-complete -F _hyprfreeze hyprfreeze
+complete -F _wl_freeze wl-freeze
