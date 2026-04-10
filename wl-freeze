@@ -135,10 +135,10 @@ function getPidByActive() {
       echo "Could not detect the compositor."
       echo ""
       echo "You can use the custom command flag to specify how to get the PID:"
-      echo "  wl-freeze -c "<command that outputs the PID>""
+      printf '  wl-freeze -c "<command that outputs the PID>" '
       echo ""
       echo "Example for niri compositor:"
-      echo "  wl-freeze -c "niri msg --json focused-window | jq '.pid'""
+      printf "  wl-freeze -c \"niri msg --json focused-window | jq '.pid'\" "
       echo ""
       echo "Please consider opening an issue on GitHub so that it can be implemented natively"
       exit 1
@@ -147,10 +147,10 @@ function getPidByActive() {
       echo "Detecting the active window is currently not supported on: $DESKTOP"
       echo ""
       echo "You can use the custom command flag to specify how to get the PID:"
-      echo "  wl-freeze -c "<command that outputs the PID>""
+      printf '  wl-freeze -c "<command that outputs the PID>" '
       echo ""
       echo "Example for niri compositor:"
-      echo "  wl-freeze -c "niri msg --json focused-window | jq '.pid'""
+      printf "  wl-freeze -c \"niri msg --json focused-window | jq '.pid'\" "
       echo ""
       echo "Please consider opening an issue on GitHub so that it can be implemented natively"
       exit 1
@@ -195,9 +195,7 @@ function getPidByCustom() {
   
   # Execute the custom command and capture output
   local result
-  result=$(bash -c "$1" 2>/dev/null)
-  
-  if [ $? -ne 0 ]; then
+  if ! result=$(bash -c "$1" 2>/dev/null); then
     echo "Custom command failed to execute: $1"
     exit 1
   fi
@@ -221,9 +219,9 @@ function getPidByCustom() {
 }
 
 function detectEnvironment() {
-  if [ $(command -v loginctl) ]; then
+  if [ "$(command -v loginctl)" ]; then
     local Desktop
-    eval "$(loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Desktop)"
+    eval "$(loginctl show-session "$(loginctl | grep "$(whoami)" | awk '{print $1}' | head -1)" -p Desktop)"
     DESKTOP=$Desktop
   fi
 
