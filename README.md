@@ -20,7 +20,7 @@ https://github.com/Zerodya/hyprfreeze/assets/73220426/541318e2-441a-485a-91c5-f5
 - **Sway**
 - **Niri**
 
-### Unsopported compositors
+### Unsupported compositors
 
 If your compositor is not natively supported, you can use the `-c` flag with a command that outputs the focused window's PID. Example for Niri:
 
@@ -43,7 +43,7 @@ Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=
 **Dependencies**
 - `jq` to parse JSON
 - `psmisc` contains `pstree` which is required to list child processes
-- `xdotool` to find the PID of Xwayland windows created via `xwayland-satellite` (Mainly for **Niri**)
+- `xdotool` to find the PID of XWayland windows created via `xwayland-satellite` (Mainly for **Niri**)
 - `libnotify` for desktop notifications (Optional)
 
 **Symlink script**
@@ -110,9 +110,9 @@ binds {
 
 -s, --silent          don't send notification
 -t, --notif-timeout   notification timeout in milliseconds (default 5000)
---dry-run             doesn't actually suspend/resume a process
+--dry-run             don't actually suspend/resume a process
 --debug               enable debug mode
---no-xorg-workaround  skip the XWayland mouse capture workaround (Hyprland only)
+--no-xwayland-mouse-release  skip the XWayland mouse capture release
 ```
 
 ### Examples:
@@ -130,7 +130,7 @@ wl-freeze -c "hyprprop | jq '.pid'"
   - **workaround**: Run the game with the env variable: `ALSOFT_DRIVERS=pulse`
 
 - **Hyprland only**: Pausing XWayland games (no Gamescope or Proton Wayland) may stop the mouse from working in other XWayland apps like Discord. 
-  - **workaround**: A workaround has been implemented that quickly switches workspaces to release the mouse capture before pausing the window. Use `--no-xorg-workaround` to disable this.
+  - **workaround**: A mouse capture release has been implemented that quickly switches workspaces before pausing the window. Use `--no-xwayland-mouse-release` to disable this.
 
 ## FAQ
 - **Q:** Can this script suspend games to disk?

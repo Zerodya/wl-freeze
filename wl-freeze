@@ -9,7 +9,7 @@ declare -i SILENT=0
 declare -i NOTIF_TIMEOUT=5000
 declare -i DRYRUN=0
 declare -i DEBUG=0
-declare -i NO_XORG_WORKAROUND=0
+declare -i NO_XWAYLAND_MOUSE_RELEASE=0
 
 declare PID=""
 declare DESKTOP=""
@@ -52,7 +52,7 @@ Options:
   -t, --notif-timeout   notification timeout in milliseconds (default 5000)
   --dry-run             don't actually suspend/resume a process
   --debug               enable debug mode
-  --no-xorg-workaround  skip the XWayland mouse capture workaround
+  --no-xwayland-mouse-release  skip the XWayland mouse capture release
 EOF
 }
 
@@ -113,8 +113,8 @@ function isXWaylandWindow() {
 # XWayland mouse capture release
 # ---------------------------------------------------------------------------
 function releaseMouseCapture() {
-  if [[ $NO_XORG_WORKAROUND == "1" ]]; then
-    debugPrint "XWayland workaround disabled, skipping"
+  if [[ $NO_XWAYLAND_MOUSE_RELEASE == "1" ]]; then
+    debugPrint "XWayland mouse capture release disabled, skipping"
     return 0
   fi
 
@@ -155,11 +155,11 @@ function releaseMouseCapture() {
       ;;
 
     sway)
-      debugPrint "Sway - no XWayland workaround implemented"
+      debugPrint "Sway - no XWayland mouse capture release implemented"
       ;;
 
     *)
-      debugPrint "Compositor '$DESKTOP' not implemented for XWayland workaround"
+      debugPrint "Compositor '$DESKTOP' not implemented for XWayland mouse capture release"
       ;;
   esac
 }
@@ -357,7 +357,7 @@ function args() {
   local parsed
 
   parsed=$(getopt -o hap:n:c:st: \
-    --long help,active,pid:,name:,custom:,silent,notif-timeout:,dry-run,debug,no-xorg-workaround \
+    --long help,active,pid:,name:,custom:,silent,notif-timeout:,dry-run,debug,no-xwayland-mouse-release \
     -n "$(basename "$0")" -- "$@") || exit 1
 
   eval set -- "$parsed"
@@ -372,7 +372,7 @@ function args() {
       -t|--notif-timeout) shift; NOTIF_TIMEOUT=$1 ;;
       --dry-run)      DRYRUN=1 ;;
       --debug)        DEBUG=1 ;;
-      --no-xorg-workaround) NO_XORG_WORKAROUND=1 ;;
+      --no-xwayland-mouse-release) NO_XWAYLAND_MOUSE_RELEASE=1 ;;
       --)             shift; break ;;
       *)              exit 1 ;;
     esac
