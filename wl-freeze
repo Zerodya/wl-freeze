@@ -42,6 +42,8 @@ function releaseMouseCapture() {
   # Get the active window info based on compositor
   local active_win
   local is_xwayland="false"
+  local current_ws
+  local other_workspace
   
   case "$DESKTOP" in
     hyprland)
@@ -54,12 +56,10 @@ function releaseMouseCapture() {
         debugPrint "XWayland window detected - using workspace switching to release mouse capture..."
         
         # Get the current workspace
-        local current_ws
         current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
         debugPrint "Current workspace: $current_ws"
         
         # Find another workspace to switch to briefly
-        local other_workspace
         other_workspace=$(hyprctl workspaces -j | jq -r '.[] | select(.id != '"$current_ws"') | .id' | head -1)
         
         if [ -n "$other_workspace" ]; then
@@ -76,8 +76,33 @@ function releaseMouseCapture() {
       debugPrint "Sway detected - no XWayland mouse capture workaround implemented"
       ;;
     niri)
-      # Niri doesn't have the same XWayland mouse capture issue as Hyprland
-      debugPrint "Niri detected - no XWayland mouse capture workaround implemented"
+      if [[ "$XWAYLAND_SATELLITE" == "1" ]]; then
+        is_xwayland="true"
+        debugPrint "XWayland window detected via xwayland-satellite flag"
+      else
+        debugPrint "Native Wayland window"
+      fi
+
+      if [[ "$is_xwayland" == "true" ]]; then
+        debugPrint "XWayland window detected - using workspace switching..."
+
+        # Get current workspace
+        current_ws=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == true) | .idx')
+        debugPrint "Current workspace: $current_ws"
+
+        # Find another workspace
+        other_workspace=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == false) | .idx' | head -1)
+
+        if [ -n "$other_workspace" ]; then
+          debugPrint "Switching to workspace $other_workspace and back..."
+          niri msg action focus-workspace "$other_workspace"
+          niri msg action focus-workspace "$current_ws"
+        else
+          debugPrint "No other workspace found - using focus-workspace-down/up..."
+          niri msg action focus-workspace-down
+          niri msg action focus-workspace-up
+        fi
+      fi
       ;;
     *)
       debugPrint "Compositor $DESKTOP not implemented for XWayland workaround"
@@ -129,7 +154,32 @@ function getPidByActive() {
       PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
       ;;
     niri)
-      PID=$(niri msg --json focused-window | jq '.pid')
+      local raw_pid
+      raw_pid=$(niri msg --json focused-window | jq '.pid')
+
+      local proc_name
+      proc_name=$(ps -p "$raw_pid" -o comm= 2>/dev/null)
+
+      # Check for xwayland-satellite
+      if [[ "$proc_name" == *"xwayland-"* ]] || [[ "$proc_name" == *"Xwayland-"* ]]; then
+        debugPrint "xwayland-satellite detected ($proc_name), using xdotool to get actual X client PID..."
+
+        # Set flag for releaseMouseCapture()
+        XWAYLAND_SATELLITE=1
+
+        PID=$(xdotool getactivewindow getwindowpid 2>/dev/null)
+
+        if [ -z "$PID" ] || [ "$PID" = "0" ]; then
+          echo "Failed to get PID via xdotool. Is xdotool installed?"
+          exit 1
+        fi
+
+        debugPrint "xdotool PID: $PID (xwayland-satellite was $raw_pid)"
+      else
+        PID=$raw_pid
+        XWAYLAND_SATELLITE=0
+        debugPrint "Native Wayland window ($proc_name), using niri PID: $PID"
+      fi
       ;;
     "")
       echo "Could not detect the compositor."
@@ -351,6 +401,7 @@ NOTIF_TIMEOUT=5000
 DRYRUN=0
 DEBUG=0
 NO_XORG_WORKAROUND=0
+XWAYLAND_SATELLITE=0
 
 args "$@"
 

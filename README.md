@@ -43,6 +43,7 @@ Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=
 **Dependencies**
 - `jq` to parse JSON
 - `psmisc` contains `pstree` which is required to list child processes
+- `xdotool` to find the PID of Xwayland windows created via `xwayland-satellite` (Mainly for **Niri**)
 - `libnotify` for desktop notifications (Optional)
 
 **Symlink script**
