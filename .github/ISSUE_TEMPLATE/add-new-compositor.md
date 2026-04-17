@@ -11,25 +11,33 @@ assignees: ''
 
 **Distro:** <Your distro here> <version>
 
-**Environment:**
-First command:
+**Environment 1** (run command):
 ```sh
 loginctl show-session "$(loginctl | grep "$(whoami)" | awk '{print $1}' | head -1)" -p Desktop
 ```
-My output:
-```
-<Your output here>
-```
-Second command:
 ```sh
-echo $XDG_SESSION_DESKTOP
-```
-My output:
-```
 <Your output here>
 ```
 
-**Command to get the focused window PID:** <Command here> (must return the pid number and nothing else, like `12345`)
+**Environment 2** (run command):
+```sh
+echo $XDG_SESSION_DESKTOP
+```
+```sh
+<Your output here>
+```
+
+**Command to get the focused window PID:** `<Command here>` (must return the pid number and nothing else, like `12345`)
+
+
+**Command debug** (run command):
+```sh
+wl-freeze -c "your-command-here" --debug
+```
+```sh
+<Your output here>
+```
+
 
 **Does mouse input work in other XWayland apps like Discord when pausing XWayland games?** <yes/no>
 
