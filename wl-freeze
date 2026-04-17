@@ -1,7 +1,39 @@
 #!/usr/bin/env bash
 
+set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Globals
+# ---------------------------------------------------------------------------
+declare -i SILENT=0
+declare -i NOTIF_TIMEOUT=5000
+declare -i DRYRUN=0
+declare -i DEBUG=0
+declare -i NO_XORG_WORKAROUND=0
+
+declare PID=""
+declare DESKTOP=""
+declare FLAG_ACTIVE=""
+declare FLAG_PID=""
+declare FLAG_NAME=""
+declare FLAG_CUSTOM=""
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+function die() {
+  echo "Error: $1" >&2
+  exit 1
+}
+
+function debugPrint() {
+  if (( DEBUG )); then
+    echo "[DEBUG] $1" >&2
+  fi
+}
+
 function printHelp() {
-	cat <<EOF
+  cat <<'EOF'
 Usage: wl-freeze (-a | -p <pid> | -n <name> | -c <command>) [options]
 
 Utility to suspend a game process (and other programs) in Wayland compositors.
@@ -18,391 +50,369 @@ Options:
 
   -s, --silent          don't send notification
   -t, --notif-timeout   notification timeout in milliseconds (default 5000)
-  --dry-run             doesn't actually suspend/resume a process
+  --dry-run             don't actually suspend/resume a process
   --debug               enable debug mode
-  --no-xorg-workaround  skip the XWayland mouse capture workaround (other XWayland windows may become non-interactable)
+  --no-xorg-workaround  skip the XWayland mouse capture workaround
 EOF
 }
 
-function debugPrint() {
-  if [ "$DEBUG" -eq 1 ]; then
-    echo "[DEBUG] $1"
+# ---------------------------------------------------------------------------
+# Compositor detection
+# ---------------------------------------------------------------------------
+function detectCompositor() {
+  if command -v loginctl >/dev/null 2>&1; then
+    local session_id
+    session_id=$(loginctl 2>/dev/null | awk -v u="$(whoami)" 'NR>1 && $3 == u {print $1; exit}')
+    if [[ -n "$session_id" ]]; then
+      DESKTOP=$(loginctl show-session "$session_id" -p Desktop 2>/dev/null | sed 's/^Desktop=//')
+    fi
   fi
+
+  if [[ -z "$DESKTOP" ]]; then
+    DESKTOP="${XDG_SESSION_DESKTOP:-}"
+  fi
+
+  # Normalize
+  DESKTOP="${DESKTOP,,}"
+  DESKTOP="${DESKTOP%-uwsm}"
+
+  debugPrint "Compositor: ${DESKTOP:-<unknown>}"
 }
 
-function releaseMouseCapture() {
-  # Skip if workaround is disabled
-  if [[ $NO_XORG_WORKAROUND == "1" ]]; then
-    debugPrint "XWayland workaround disabled, skipping mouse capture release"
-    return 0
-  fi
-  
-  debugPrint "Attempting to release mouse capture for XWayland..."
-  
-  # Get the active window info based on compositor
-  local active_win
-  local is_xwayland="false"
-  local current_ws
-  local other_workspace
-  
+# ---------------------------------------------------------------------------
+# XWayland detection
+# ---------------------------------------------------------------------------
+function isXWaylandWindow() {
+  local result="false"
+
   case "$DESKTOP" in
     hyprland)
-      active_win=$(hyprctl activewindow -j)
-      is_xwayland=$(echo "$active_win" | jq -r '.xwayland')
-      debugPrint "Is XWayland window: $is_xwayland"
-      
-      # If it's an XWayland window, use workspace switching to release mouse capture
-      if [[ "$is_xwayland" == "true" ]]; then
-        debugPrint "XWayland window detected - using workspace switching to release mouse capture..."
-        
-        # Get the current workspace
-        current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
-        debugPrint "Current workspace: $current_ws"
-        
-        # Find another workspace to switch to briefly
-        other_workspace=$(hyprctl workspaces -j | jq -r '.[] | select(.id != '"$current_ws"') | .id' | head -1)
-        
-        if [ -n "$other_workspace" ]; then
-          debugPrint "Switching to workspace $other_workspace and back to release mouse capture..."
-          hyprctl dispatch workspace "$other_workspace"
-          hyprctl dispatch workspace "$current_ws"
-        else
-          debugPrint "No other workspace found, cannot release mouse capture via workspace switching"
+      result=$(hyprctl activewindow -j 2>/dev/null | jq -r '.xwayland')
+      ;;
+    niri)
+      local niri_pid
+      niri_pid=$(niri msg --json focused-window 2>/dev/null | jq '.pid')
+      if [[ -n "$niri_pid" ]] && [[ "$niri_pid" != "null" ]]; then
+        local proc_name
+        proc_name=$(ps -p "$niri_pid" -o comm= 2>/dev/null)
+        if [[ "$proc_name" == *"xwayland-"* ]]; then
+          result="true"
         fi
       fi
       ;;
     sway)
-      # Sway doesn't have the same XWayland mouse capture issue as Hyprland in the same way
-      debugPrint "Sway detected - no XWayland mouse capture workaround implemented"
+      # TODO: Determine if Sway needs this workaround
+      result="false"
       ;;
+  esac
+
+  [[ "$result" == "true" ]]
+}
+
+# ---------------------------------------------------------------------------
+# XWayland mouse capture release
+# ---------------------------------------------------------------------------
+function releaseMouseCapture() {
+  if [[ $NO_XORG_WORKAROUND == "1" ]]; then
+    debugPrint "XWayland workaround disabled, skipping"
+    return 0
+  fi
+
+  isXWaylandWindow || return 0
+
+  debugPrint "XWayland window detected - releasing mouse capture via workspace switch..."
+
+  local current_ws other_workspace
+
+  case "$DESKTOP" in
+    hyprland)
+      current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+      other_workspace=$(hyprctl workspaces -j | jq -r '.[] | select(.id != '"$current_ws"') | .id' | head -1)
+
+      if [[ -z "$other_workspace" ]]; then
+        debugPrint "No other workspace available"
+        return 1
+      fi
+
+      debugPrint "Switching workspace $current_ws -> $other_workspace -> $current_ws"
+      hyprctl dispatch workspace "$other_workspace" >/dev/null
+      hyprctl dispatch workspace "$current_ws" >/dev/null
+      ;;
+
     niri)
-      if [[ "$XWAYLAND_SATELLITE" == "1" ]]; then
-        is_xwayland="true"
-        debugPrint "XWayland window detected via xwayland-satellite flag"
+      current_ws=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == true) | .idx')
+      other_workspace=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == false) | .idx' | head -1)
+
+      if [[ -n "$other_workspace" ]]; then
+        debugPrint "Switching workspace $current_ws -> $other_workspace -> $current_ws"
+        niri msg action focus-workspace "$other_workspace"
+        niri msg action focus-workspace "$current_ws"
       else
-        debugPrint "Native Wayland window"
-      fi
-
-      if [[ "$is_xwayland" == "true" ]]; then
-        debugPrint "XWayland window detected - using workspace switching..."
-
-        # Get current workspace
-        current_ws=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == true) | .idx')
-        debugPrint "Current workspace: $current_ws"
-
-        # Find another workspace
-        other_workspace=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == false) | .idx' | head -1)
-
-        if [ -n "$other_workspace" ]; then
-          debugPrint "Switching to workspace $other_workspace and back..."
-          niri msg action focus-workspace "$other_workspace"
-          niri msg action focus-workspace "$current_ws"
-        else
-          debugPrint "No other workspace found - using focus-workspace-down/up..."
-          niri msg action focus-workspace-down
-          niri msg action focus-workspace-up
-        fi
+        debugPrint "No other workspace - using focus-workspace-down/up"
+        niri msg action focus-workspace-down
+        niri msg action focus-workspace-up
       fi
       ;;
+
+    sway)
+      debugPrint "Sway - no XWayland workaround implemented"
+      ;;
+
     *)
-      debugPrint "Compositor $DESKTOP not implemented for XWayland workaround"
+      debugPrint "Compositor '$DESKTOP' not implemented for XWayland workaround"
       ;;
   esac
 }
 
-function toggleFreeze() {
-  # Skip this function if --dry-run flag was provided
-  if [[ $DRYRUN == "1" ]]; then return 0; fi
-
-  # Get pids of process tree
-  PIDS=$(pstree -p "$PID" | grep -oP '\(\K[^\)]+')
-
-  # Format PIDs for display (comma-separated)
-  PIDS_DISPLAY=$(echo "$PIDS" | tr '\n' ',' | sed 's/,$//')
-  debugPrint "PIDs: $PIDS_DISPLAY"
-
-  # Prevent suspending itself
-  local pid_of_script=$$
-  if echo "$PIDS" | grep -q "$pid_of_script"; then
-    echo "You are trying to suspend the wl-freeze process."
-    exit 1
-  fi
-
-  # Suspend or resume processes
-  if [[ "$(ps -o state= "$PID")" == T ]]; then
-    debugPrint "Resuming processes..."
-    # shellcheck disable=SC2086
-    kill -CONT $PIDS 2>/dev/null && echo "Resumed $(ps -p "$PID" -o comm= 2>/dev/null) (PID $PID)" || exit 1
-  else
-    # Before suspending, release mouse capture for XWayland windows
-    releaseMouseCapture
-    
-    debugPrint "Suspending processes..."
-    # shellcheck disable=SC2086
-    kill -STOP $PIDS 2>/dev/null && echo "Suspended $(ps -p "$PID" -o comm= 2>/dev/null) (PID $PID)" || exit 1
-  fi
-}
-
+# ---------------------------------------------------------------------------
+# getPid functions
+# ---------------------------------------------------------------------------
 function getPidByActive() {
   debugPrint "Getting PID by active window..."
-  
+
   case "$DESKTOP" in
     hyprland)
       PID=$(hyprctl activewindow -j | jq '.pid')
       ;;
+
     sway)
       PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
       ;;
-    niri)
-      local raw_pid
-      raw_pid=$(niri msg --json focused-window | jq '.pid')
 
-      local proc_name
+    niri)
+      local raw_pid proc_name
+      raw_pid=$(niri msg --json focused-window | jq '.pid')
       proc_name=$(ps -p "$raw_pid" -o comm= 2>/dev/null)
 
-      # Check for xwayland-satellite
-      if [[ "$proc_name" == *"xwayland-"* ]] || [[ "$proc_name" == *"Xwayland-"* ]]; then
-        debugPrint "xwayland-satellite detected ($proc_name), using xdotool to get actual X client PID..."
-
-        # Set flag for releaseMouseCapture()
-        XWAYLAND_SATELLITE=1
-
+      if [[ "$proc_name" == *"xwayland"* ]]; then
+        debugPrint "xwayland-satellite wrapper detected ($proc_name), querying xdotool for real PID..."
         PID=$(xdotool getactivewindow getwindowpid 2>/dev/null)
 
-        if [ -z "$PID" ] || [ "$PID" = "0" ]; then
-          echo "Failed to get PID via xdotool. Is xdotool installed?"
-          exit 1
+        if [[ -z "$PID" ]] || [[ "$PID" == "0" ]]; then
+          die "xdotool returned invalid PID. Is xdotool installed and an XWayland window focused?"
         fi
-
-        debugPrint "xdotool PID: $PID (xwayland-satellite was $raw_pid)"
+        debugPrint "xdotool PID: $PID (wrapper was $raw_pid)"
       else
         PID=$raw_pid
-        XWAYLAND_SATELLITE=0
-        debugPrint "Native Wayland window ($proc_name), using niri PID: $PID"
+        debugPrint "Native Wayland window ($proc_name), PID: $PID"
       fi
       ;;
+
     "")
-      echo "Could not detect the compositor."
-      echo ""
-      echo "You can use the custom command flag to specify how to get the PID:"
-      printf '  wl-freeze -c "<command that outputs the PID>" '
-      echo ""
-      echo "Example for niri compositor:"
-      printf "  wl-freeze -c \"niri msg --json focused-window | jq '.pid'\" "
-      echo ""
-      echo "Please consider opening an issue on GitHub so that it can be implemented natively"
+      cat >&2 <<'EOF'
+Could not detect the compositor.
+
+You can use a custom command to get the PID:
+  wl-freeze -c "<command that outputs the PID>"
+
+Example:
+  wl-freeze -c "niri msg --json focused-window | jq '.pid'"
+
+Please consider opening an issue on GitHub so native support can be added.
+EOF
       exit 1
       ;;
+
     *)
-      echo "Detecting the active window is currently not supported on: $DESKTOP"
-      echo ""
-      echo "You can use the custom command flag to specify how to get the PID:"
-      printf '  wl-freeze -c "<command that outputs the PID>" '
-      echo ""
-      echo "Example for niri compositor:"
-      printf "  wl-freeze -c \"niri msg --json focused-window | jq '.pid'\" "
-      echo ""
-      echo "Please consider opening an issue on GitHub so that it can be implemented natively"
+      cat >&2 <<EOF
+Detecting the active window is currently not supported on: $DESKTOP
+
+You can use a custom command to get the PID:
+  wl-freeze -c "<command that outputs the PID>"
+
+  Example:
+  wl-freeze -c "niri msg --json focused-window | jq '.pid'"
+
+Please consider opening an issue on GitHub so native support can be added.
+EOF
       exit 1
       ;;
   esac
-  
-  debugPrint "PID by active window: $PID"
 
-  # Die if PID is not numeric (e.g. "null" if there is no active window)
-  if ! [[ $PID == ?(-)+([[:digit:]]) ]]; then
-    echo "Cannot freeze window with invalid PID $PID."
-    exit 1
+  if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
+    die "Got invalid PID from compositor: '$PID'"
   fi
+
+  debugPrint "PID: $PID"
 }
 
 function getPidByPid() {
-  debugPrint "Getting PID by PID: $1"
-  # Check if process pid exists
-  if ! ps -p "$1" &>/dev/null; then
-    echo "Process ID $1 not found"
-    exit 1
+  debugPrint "Getting PID by argument: $1"
+  if ! ps -p "$1" >/dev/null 2>&1; then
+    die "Process ID $1 not found"
   fi
-
   PID=$1
 }
 
 function getPidByName() {
   debugPrint "Getting PID by name: $1"
-  # Check if process name exists
-  if ! pidof -x "$1" >/dev/null; then
-    echo "Process name $1 not found"
-    exit 1
+  if ! pidof -x "$1" >/dev/null 2>&1; then
+    die "Process name '$1' not found"
   fi
-
-  # Get last process if there are multiple
   PID=$(pidof "$1" | awk '{print $NF}')
-  debugPrint "PID by name: $PID"
+  debugPrint "PID: $PID"
 }
 
 function getPidByCustom() {
   debugPrint "Getting PID by custom command: $1"
-  
-  # Execute the custom command and capture output
+
   local result
   if ! result=$(bash -c "$1" 2>/dev/null); then
-    echo "Custom command failed to execute: $1"
-    exit 1
+    die "Custom command failed to execute: $1"
   fi
-  
-  # Extract PID (should be a number)
+
   PID=$(echo "$result" | tr -d '[:space:]')
-  debugPrint "Raw output from custom command: $result"
-  debugPrint "Processed PID: $PID"
-  
-  # Validate PID is numeric
-  if ! [[ $PID == ?(-)+([[:digit:]]) ]]; then
-    echo "Custom command did not return a valid PID. Output was: $result"
-    exit 1
+  debugPrint "Raw output: '$result' -> PID: '$PID'"
+
+  if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
+    die "Custom command did not return a valid PID. Output was: '$result'"
   fi
-  
-  # Verify the process exists
-  if ! ps -p "$PID" &>/dev/null; then
-    echo "Custom command returned PID $PID, but no such process exists"
-    exit 1
+
+  if ! ps -p "$PID" >/dev/null 2>&1; then
+    die "PID $PID does not exist"
   fi
 }
 
-function detectEnvironment() {
-  if [ "$(command -v loginctl)" ]; then
-    local Desktop
-    eval "$(loginctl show-session "$(loginctl | grep "$(whoami)" | awk '{print $1}' | head -1)" -p Desktop)"
-    DESKTOP=$Desktop
+# ---------------------------------------------------------------------------
+# Core logic
+# ---------------------------------------------------------------------------
+function toggleFreeze() {
+  local should_release=$1
+
+  if [[ $DRYRUN == "1" ]]; then
+    debugPrint "Dry-run: skipping suspend/resume"
+    return 0
   fi
 
-  if [ -z "$DESKTOP" ]; then
-    DESKTOP=$XDG_SESSION_DESKTOP
+  # Build PID array from process tree
+  local -a pid_array=()
+  local entry
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] && pid_array+=("$entry")
+  done < <(pstree -p "$PID" | grep -oP '\(\K[^\)]+')
+
+  if ((${#pid_array[@]} == 0)); then
+    die "Could not find any processes in tree for PID $PID"
   fi
 
-  # Enforce lowercase for consistent matching
-  DESKTOP="${DESKTOP,,}"
+  debugPrint "Process tree PIDs: $(printf '%s,' "${pid_array[@]}" | sed 's/,$//')"
 
-  # Normalize UWSM desktop names
-  if [[ "$DESKTOP" == *-uwsm ]]; then
-    DESKTOP="${DESKTOP%-uwsm}"
+  # Prevent self-suspension
+  if printf '%s\n' "${pid_array[@]}" | grep -qw "$$"; then
+    die "Refusing to suspend the wl-freeze process itself"
   fi
 
-  debugPrint "Desktop: $DESKTOP"
+  # Determine current state
+  local state
+  state=$(ps -p "$PID" -o state= 2>/dev/null | tr -d ' ')
+  if [[ -z "$state" ]]; then
+    die "Process $PID no longer exists"
+  fi
+
+  local proc_name
+  proc_name=$(ps -p "$PID" -o comm= 2>/dev/null || echo "Unknown")
+
+  if [[ "$state" == T ]]; then
+    debugPrint "Resuming processes..."
+    if kill -CONT "${pid_array[@]}" 2>/dev/null; then
+      echo "Resumed $proc_name (PID $PID)"
+    else
+      die "Failed to resume $proc_name (PID $PID)"
+    fi
+  else
+    if [[ "$should_release" == "1" ]]; then
+      releaseMouseCapture
+    fi
+
+    debugPrint "Suspending processes..."
+    if kill -STOP "${pid_array[@]}" 2>/dev/null; then
+      echo "Suspended $proc_name (PID $PID)"
+    else
+      die "Failed to suspend $proc_name (PID $PID)"
+    fi
+  fi
 }
 
 function sendNotification() {
   debugPrint "Sending notification..."
-  local title
-  title=$( [[ "$(ps -p "$PID" -o state=)" == T ]] &&
-    echo "Suspended $(ps -p "$PID" -o comm= 2>/dev/null)" ||
-    echo "Resumed $(ps -p "$PID" -o comm= 2>/dev/null)")
 
-  local message="PID $PID"
+  local state proc_name title
+  state=$(ps -p "$PID" -o state= 2>/dev/null | tr -d ' ')
+  proc_name=$(ps -p "$PID" -o comm= 2>/dev/null || echo "Unknown")
 
-  notify-send "${title}" "${message}" -t "$NOTIF_TIMEOUT" -a wl-freeze
+  if [[ "$state" == T ]]; then
+    title="Suspended $proc_name"
+  else
+    title="Resumed $proc_name"
+  fi
+
+  notify-send "$title" "PID $PID" -t "$NOTIF_TIMEOUT" -a wl-freeze
 }
 
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
 function args() {
-  # Track required flags
-  local required_flag_count=0
+  local required_count=0
+  local parsed
 
-  # Parse options
-  local options="hap:n:c:st:"
-  local long_options="help,active,pid:,name:,custom:,silent,notif-timeout:,dry-run,debug,no-xorg-workaround"
-  local parsed_args
-  parsed_args=$(getopt -o "$options" --long "$long_options" -n "$(basename "$0")" -- "$@")
+  parsed=$(getopt -o hap:n:c:st: \
+    --long help,active,pid:,name:,custom:,silent,notif-timeout:,dry-run,debug,no-xorg-workaround \
+    -n "$(basename "$0")" -- "$@") || exit 1
 
-  eval set -- "$parsed_args"
+  eval set -- "$parsed"
   while true; do
     case $1 in
-      -h | --help)
-        printHelp
-        exit 0
-        ;;
-      -a | --active)
-        ((required_flag_count++))
-        FLAG_ACTIVE=true
-        ;;
-      -p | --pid)
-        ((required_flag_count++))
-        shift
-        FLAG_PID="$1"
-        ;;
-      -n | --name)
-        ((required_flag_count++))
-        shift
-        NAME_FLAG="$1"
-        ;;
-      -c | --custom)
-        ((required_flag_count++))
-        shift
-        CUSTOM_FLAG="$1"
-        ;;
-      -s | --silent)
-        SILENT=1
-        ;;
-      -t | --notif-timeout)
-        shift
-        NOTIF_TIMEOUT="$1"
-        ;;
-      --dry-run)
-        DRYRUN=1
-        ;;
-      --debug)
-        DEBUG=1
-        ;;
-      --no-xorg-workaround)
-        NO_XORG_WORKAROUND=1
-        ;;
-      --)
-        shift # Skip -- argument
-        break
-        ;;
-      *)
-        exit 1
-        ;;
+      -h|--help)      printHelp; exit 0 ;;
+      -a|--active)    ((required_count++)); FLAG_ACTIVE=1 ;;
+      -p|--pid)       ((required_count++)); shift; FLAG_PID=$1 ;;
+      -n|--name)      ((required_count++)); shift; FLAG_NAME=$1 ;;
+      -c|--custom)    ((required_count++)); shift; FLAG_CUSTOM=$1 ;;
+      -s|--silent)    SILENT=1 ;;
+      -t|--notif-timeout) shift; NOTIF_TIMEOUT=$1 ;;
+      --dry-run)      DRYRUN=1 ;;
+      --debug)        DEBUG=1 ;;
+      --no-xorg-workaround) NO_XORG_WORKAROUND=1 ;;
+      --)             shift; break ;;
+      *)              exit 1 ;;
     esac
     shift
   done
 
-  # Check if more than one required flag is provided, or if none was provided
-  if [ $required_flag_count -ne 1 ]; then
+  if ((required_count != 1)); then
     printHelp
     exit 1
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 function main() {
-  debugPrint "Starting main function..."
+  args "$@"
+  debugPrint "Starting wl-freeze..."
 
-  # Get pid by a required flag
-  if [ "$FLAG_ACTIVE" = true ]; then
-    detectEnvironment
+  local should_release=0
+
+  if [[ "$FLAG_ACTIVE" == "1" ]]; then
+    detectCompositor
     getPidByActive
-  elif [ -n "$FLAG_PID" ]; then
+    should_release=1
+  elif [[ -n "$FLAG_PID" ]]; then
     getPidByPid "$FLAG_PID"
-  elif [ -n "$NAME_FLAG" ]; then
-    getPidByName "$NAME_FLAG"
-  elif [ -n "$CUSTOM_FLAG" ]; then
-    getPidByCustom "$CUSTOM_FLAG"
+  elif [[ -n "$FLAG_NAME" ]]; then
+    getPidByName "$FLAG_NAME"
+  elif [[ -n "$FLAG_CUSTOM" ]]; then
+    getPidByCustom "$FLAG_CUSTOM"
   fi
 
-  # Suspend or resume process
-  toggleFreeze
+  toggleFreeze "$should_release"
 
-  # Send notification if not silent
-  if [ $SILENT -ne 1 ]; then sendNotification; fi
+  if (( !SILENT )); then
+    sendNotification
+  fi
 
-  debugPrint "End of main function."
+  debugPrint "Done."
 }
 
-SILENT=0
-NOTIF_TIMEOUT=5000
-DRYRUN=0
-DEBUG=0
-NO_XORG_WORKAROUND=0
-XWAYLAND_SATELLITE=0
-
-args "$@"
-
-main
+main "$@"
