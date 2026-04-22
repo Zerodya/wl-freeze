@@ -15,7 +15,7 @@ https://github.com/Zerodya/hyprfreeze/assets/73220426/541318e2-441a-485a-91c5-f5
 >
 > But in Wayland **each compositor has its own way** to extract the PID from the currently focused window, so this script relies on **people like you** to add support to new compositors. See how below!
 
-## Supported compositors
+## 🖥️ Supported compositors
 - **Hyprland**
 - **Sway**
 - **Niri**
@@ -32,7 +32,7 @@ The command output must be the pid number and nothing else, like: `12345`.
 ### Adding support for new compositors
 If your compositor is not supported yet, please consider [opening an issue](https://github.com/Zerodya/wl-freeze/issues) and fill the template so that it can be implemented natively. Thank you!
 
-## Installation
+## 📦 Installation
 ### Arch Linux
 Available in the [AUR](https://aur.archlinux.org/packages/wl-freeze-git). (Maintained by [Aethar](https://github.com/Aethar01))
 
@@ -83,7 +83,7 @@ sudo ln -s $(pwd)/completions/fish/wl-freeze.fish /usr/share/fish/completions/
 </details> 
 
 
-## Usage
+## 🧰 Usage
 
 ### Bind it in your compositor
 ```sh
@@ -125,7 +125,7 @@ wl-freeze -n eldenring.exe
 wl-freeze -c "hyprprop | jq '.pid'"
 ```
 
-## Known issues
+## 🐛 Known issues
 - **When pausing native games**: System audio may stop when pausing Linux native games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
   - **workaround**: Run the game with the env variable: `ALSOFT_DRIVERS=pulse`
 
@@ -137,7 +137,7 @@ wl-freeze -c "hyprprop | jq '.pid'"
     - Sway: Not implemented ❌
     - Niri: Implemented ✅
 
-## FAQ
+## 📜 FAQ
 - **Q:** How is this better than just sending SIGSTOP and SIGCONT signals manually?
 
   - **A:** Obviously, it's way more ergonomic. But what actually makes it better is: 
@@ -153,7 +153,7 @@ wl-freeze -c "hyprprop | jq '.pid'"
 
   - **A:** No, only to RAM. There is currently no way to suspend and resume complex software like Proton games to disk, and if there is, I'd be happy to be proven wrong.
 
-## Disclaimer
+## 📄 Disclaimer
 There is always the risk, although slim, that an application may crash.
 
 This is intrinsically related to modifying running processes and is not something that wl-freeze can prevent.
