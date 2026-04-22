@@ -126,24 +126,32 @@ wl-freeze -c "hyprprop | jq '.pid'"
 ```
 
 ## Known issues
-- **Native games**: System audio may stop when pausing Linux native games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
+- **When pausing native games**: System audio may stop when pausing Linux native games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
   - **workaround**: Run the game with the env variable: `ALSOFT_DRIVERS=pulse`
 
-- **Hyprland only**: Pausing XWayland games (no Gamescope or Proton Wayland) may stop the mouse from working in other XWayland apps like Discord. 
-  - **workaround**: A mouse capture release has been implemented that quickly switches workspaces before pausing the window. Use `--no-xwayland-mouse-release` to disable this.
+- **When pausing Gamescope**: Game audio and input may still work when pausing Gamescope windows. This is because `wl-freeze` doesn't implement a logic to find the PID of the actual game inside Gamescope yet, so it just pauses the Gamescope PID which is not optimal. This is something I plan to fix in the future.
+
+- **When pausing XWayland**: Pausing XWayland games (no Gamescope or Proton Wayland) may stop the mouse from working in other XWayland apps like Discord. 
+  - **workaround**: A mouse capture release has been implemented that quickly switches workspaces before pausing the window, but this may not be implemented for all compositors right now. Please open an issue to help support your compositor too! See below:
+    - Hyprland: Implemented ✅
+    - Sway: Not implemented ❌
+    - Niri: Implemented ✅
 
 ## FAQ
-- **Q:** Can this script suspend games to disk?
-
-  - **A:** No, only to RAM. There is currently no way to suspend and resume complex software like Proton games to disk, and if there is, I'd be happy to be proven wrong. You can get mixed results by suspending the PC while a game is frozen, and the game may either work correctly, with low framerate, or just crash. Haven't tested with hybernation.
-
 - **Q:** How is this better than just sending SIGSTOP and SIGCONT signals manually?
 
-  - **A:** Obviously, it's way more ergonomic. But what actually makes it better is a robust freezing logic that captures and stops the entire process tree to suspend the game properly. Using SIGSTOP on just the parent process will give you issues in most games, like the game still accepting input, audio continuing to play in the background, background processes consuming CPU, etc.
+  - **A:** Obviously, it's way more ergonomic. But what actually makes it better is: 
+    1. A robust freezing logic that captures and stops the entire process tree to suspend the game properly. Using SIGSTOP on just the parent process will give you issues in most games.
+    2. Ways to get the actual game PID when using things like `xwayland-satellite` that hide the real game PID.
+    3. A mouse capture release before pausing XWayland windows. If you freeze a XWayland game while the mouse cursor is still inside the game window, you're going to trap it and mouse input will stop working in other XWayland windows too.
 
 - **Q:** Why Bash and not a more robust language?
 
-  - **A:** I wanted something that didn't require compiling, but that was also very fast for quick pausing, so Python was out of the question. If I ever start to find Bash limiting I may give in and rewrite it in Rust or Go.
+  - **A:** I wanted something that didn't require compiling, but that was also very fast for quick pausing, so Python was out of the question. If I ever start to find Bash limiting I may give in and rewrite it in Rust.
+
+- **Q:** Can this script suspend games to disk?
+
+  - **A:** No, only to RAM. There is currently no way to suspend and resume complex software like Proton games to disk, and if there is, I'd be happy to be proven wrong.
 
 ## Disclaimer
 There is always the risk, although slim, that an application may crash.
