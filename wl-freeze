@@ -276,6 +276,36 @@ function getPidByCustom() {
 # ---------------------------------------------------------------------------
 # Core logic
 # ---------------------------------------------------------------------------
+function getDescendants() {
+  local -A child_map # parent_pid -> "child1 child2 ..."
+  local root=$1
+  local pid ppid
+
+  # Accumulate all children inside child_map by reading a single system snapshot
+  while read -r pid ppid; do
+    child_map["$ppid"]+=" $pid"
+  done < <(ps -eo pid,ppid --no-headers 2>/dev/null)
+
+  # Scan the tree by reading PIDs from the queue and appending each PID's children from child_map to the queue
+  local -a queue=("$root")
+  local idx=0
+  local current child
+
+  while (( idx < ${#queue[@]} )); do
+    current=${queue[idx]}
+    ((idx++))
+    for child in ${child_map["$current"]:-}; do
+      queue+=("$child")
+    done
+  done
+
+  # Output every PID in the tree except the root
+  local i
+  for ((i=1; i<${#queue[@]}; i++)); do
+    echo "${queue[i]}"
+  done
+}
+
 function toggleFreeze() {
   local should_release=$1
 
@@ -285,11 +315,12 @@ function toggleFreeze() {
   fi
 
   # Build PID array from process tree
-  local -a pid_array=()
+  local -a pid_array=("$PID")
   local entry
+
   while IFS= read -r entry; do
     [[ -n "$entry" ]] && pid_array+=("$entry")
-  done < <(pstree -p "$PID" | grep -oP '\(\K[^\)]+')
+  done < <(getDescendants "$PID")
 
   if ((${#pid_array[@]} == 0)); then
     die "Could not find any processes in tree for PID $PID"
