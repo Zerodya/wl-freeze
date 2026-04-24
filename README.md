@@ -2,7 +2,7 @@
 
 **wl-freeze** is a community-driven utility to **suspend a game process** (and other programs) in Wayland compositors.
 
-https://github.com/Zerodya/hyprfreeze/assets/73220426/541318e2-441a-485a-91c5-f58d4f65926a 
+https://github.com/user-attachments/assets/7ffdfde5-2028-4936-b61c-092b2cf224c3
 
 **Useful to:**
 - Pause single-player games that can't normally be paused (Elden Ring, Baldur's Gate 3, ...)
