@@ -71,6 +71,10 @@ function detectCompositor() {
   if [[ -z "$DESKTOP" ]]; then
     DESKTOP="${XDG_SESSION_DESKTOP:-}"
   fi
+  
+  if [[ -z "$DESKTOP" ]]; then
+    DESKTOP="${XDG_CURRENT_DESKTOP:-}"
+  fi
 
   # Normalize
   DESKTOP="${DESKTOP,,}"
