@@ -37,7 +37,7 @@ If your compositor is not supported yet, please consider [opening an issue](http
 Available in the [AUR](https://aur.archlinux.org/packages/wl-freeze-git). (Maintained by [Aethar](https://github.com/Aethar01))
 
 ### NixOS
-Soon available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=wl-freeze).  **(PR at https://github.com/NixOS/nixpkgs/pull/508697)**
+Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=wl-freeze).
 
 ### Manual
 **Dependencies**
