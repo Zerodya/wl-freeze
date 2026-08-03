@@ -105,8 +105,8 @@ function isXWaylandWindow() {
       fi
       ;;
     kde)
-      window=$(kdotool getactivewindow)
-      kdotool getwindowclassname "$window" >/dev/null 2>&1 && result="true" || result="false"
+      # TODO: Determine if KDE needs this workaround
+      result="false"
       ;;
     sway)
       # TODO: Determine if Sway needs this workaround
