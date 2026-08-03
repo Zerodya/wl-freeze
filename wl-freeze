@@ -38,7 +38,7 @@ Usage: wl-freeze (-a | -p <pid> | -n <name> | -c <command>) [options]
 
 Utility to suspend a game process (and other programs) in Wayland compositors.
 
-Supported compositors: hyprland, sway, niri
+Supported compositors: hyprland, sway, niri, KWin (kde)
 
 Options:
   -h, --help            show help message
@@ -104,6 +104,10 @@ function isXWaylandWindow() {
         fi
       fi
       ;;
+    kde)
+      window=$(kdotool getactivewindow)
+      kdotool getwindowclassname "$window" >/dev/null 2>&1 && result="true" || result="false"
+      ;;
     sway)
       # TODO: Determine if Sway needs this workaround
       result="false"
@@ -157,7 +161,9 @@ function releaseMouseCapture() {
         niri msg action focus-workspace-up
       fi
       ;;
-
+    kde)
+      debugPrint "kde - no XWayland mouse capture release implemented"
+      ;;
     sway)
       debugPrint "Sway - no XWayland mouse capture release implemented"
       ;;
@@ -181,6 +187,10 @@ function getPidByActive() {
 
     sway)
       PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
+      ;;
+
+    kde)
+      PID=$(kdotool getactivewindow getwindowpid)
       ;;
 
     niri)
