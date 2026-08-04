@@ -104,7 +104,7 @@ function isXWaylandWindow() {
         fi
       fi
       ;;
-    kde)
+    kde|plasma)
       # TODO: Determine if KDE needs this workaround
       result="false"
       ;;
@@ -161,7 +161,7 @@ function releaseMouseCapture() {
         niri msg action focus-workspace-up
       fi
       ;;
-    kde)
+    kde|plasma)
       debugPrint "kde - no XWayland mouse capture release implemented"
       ;;
     sway)
@@ -189,7 +189,7 @@ function getPidByActive() {
       PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
       ;;
 
-    kde)
+    kde|plasma)
       PID=$(kdotool getactivewindow getwindowpid)
       ;;
 
