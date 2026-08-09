@@ -105,8 +105,11 @@ function isXWaylandWindow() {
       fi
       ;;
     kde|plasma)
-      # TODO: Determine if KDE needs this workaround
-      result="false"
+      if command -v xdotool >/dev/null 2>&1; then
+        if xdotool getactivewindow >/dev/null 2>&1; then
+          result="true"
+        fi
+      fi
       ;;
     sway)
       # TODO: Determine if Sway needs this workaround
@@ -162,7 +165,26 @@ function releaseMouseCapture() {
       fi
       ;;
     kde|plasma)
-      debugPrint "kde - no XWayland mouse capture release implemented"
+      local qdbus
+      for qdbus in qdbus6 qdbus-qt6 qdbus; do command -v "$qdbus" >/dev/null 2>&1 && break; done
+      [[ -n "$qdbus" ]] || { debugPrint "No qdbus found"; return 1; }
+
+      # Unfullscreen first since Plasma glitches when switching to a frozen fullscreen game
+      local f=$(mktemp --suffix=.js) id
+      printf 'workspace.activeWindow.fullScreen = false;\n' > "$f"
+      id=$($qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$f" "wlf_$$" 2>/dev/null) &&
+        $qdbus org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null 2>&1
+      rm -f "$f"
+
+      local cur=$($qdbus org.kde.KWin /KWin org.kde.KWin.currentDesktop 2>/dev/null)
+      [[ -n "$cur" ]] || { debugPrint "No current desktop"; return 1; }
+
+      $qdbus org.kde.KWin /KWin org.kde.KWin.nextDesktop >/dev/null
+      local nxt=$($qdbus org.kde.KWin /KWin org.kde.KWin.currentDesktop 2>/dev/null)
+      [[ "$nxt" != "$cur" ]] || { debugPrint "No other workspace"; return 1; }
+
+      debugPrint "Switching workspace $cur -> $nxt -> $cur"
+      $qdbus org.kde.KWin /KWin org.kde.KWin.previousDesktop >/dev/null
       ;;
     sway)
       debugPrint "Sway - no XWayland mouse capture release implemented"
