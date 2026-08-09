@@ -106,7 +106,7 @@ function isXWaylandWindow() {
       ;;
     kde|plasma)
       if command -v xdotool >/dev/null 2>&1; then
-        if xdotool getactivewindow >/dev/null 2>&1; then
+        if xdotool getactivewindow getwindowpid >/dev/null 2>&1; then
           result="true"
         fi
       fi
