@@ -23,9 +23,9 @@ https://github.com/user-attachments/assets/7ffdfde5-2028-4936-b61c-092b2cf224c3
 | Compositor | XWayland workaround | Notes | Contributors |
 |------------|-------------|-------|-------------|
 | **Hyprland** | ✅ Implemented |  |  |
-| **KDE Plasma** | ✅ Implemented | We also unfullscreen the game because Plasma glitches when trying to switch to a workspace containing a frozen window in fullscreen | @ExistingPerson08 |
+| **KDE Plasma** | ✅ Implemented | We also unfullscreen the game because Plasma glitches when trying to switch to a workspace containing a frozen window in fullscreen | [@ExistingPerson08](https://github.com/ExistingPerson08) |
 | **Niri** | ✅ Implemented | Assumes Niri + xwayland-satellite setup for XWayland games |  |
-| **Sway** | ⚠️ Not yet implemented |  | @alterNERDtive |
+| **Sway** | ⚠️ Not yet implemented |  | [@alterNERDtive](https://github.com/alterNERDtive) |
 
 ### Other compositors
 
