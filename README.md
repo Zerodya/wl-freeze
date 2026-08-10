@@ -15,13 +15,19 @@ https://github.com/user-attachments/assets/7ffdfde5-2028-4936-b61c-092b2cf224c3
 >
 > But in Wayland **each compositor has its own way** to extract the PID from the currently focused window, so this script relies on **people like you** to add support to new compositors. See how below!
 
-## 🖥️ Supported compositors
-- **Hyprland**
-- **Sway**
-- **Niri**
-- **KWin (kde)**
+## Supported compositors
+> **NOTE:** Playing via **Wayland** (Proton Wayland or Gamescope) is *HIGHLY RECOMMENDED.*
+>
+> Pausing XWayland windows is possible, but it may not be the best experience and we have to use workarounds for that. Check [Known issues](#known-issues) to learn more.
 
-### Unsupported compositors
+| Compositor | XWayland workaround | Notes | Contributors |
+|------------|-------------|-------|-------------|
+| **Hyprland** | ✅ Implemented |  |  |
+| **KDE Plasma** | ✅ Implemented | We also unfullscreen the game because Plasma glitches when trying to switch to a workspace containing a frozen window in fullscreen | @ExistingPerson08 |
+| **Niri** | ✅ Implemented | Assumes Niri + xwayland-satellite setup for XWayland games |  |
+| **Sway** | ⚠️ Not yet implemented |  | @alterNERDtive |
+
+### Other compositors
 
 If your compositor is not natively supported, you can use the `-c` flag with a command that outputs the focused window's PID. Example for Niri:
 
@@ -30,12 +36,15 @@ wl-freeze -c "niri msg --json focused-window | jq '.pid'"
 ```
 The command output must be the pid number and nothing else, like: `12345`.
 
-### Adding support for new compositors
-If your compositor is not supported yet, please consider [opening an issue](https://github.com/Zerodya/wl-freeze/issues) and fill the template so that it can be implemented natively. Thank you!
+Please consider [opening an issue](https://github.com/Zerodya/wl-freeze/issues) and fill the template so that it can be implemented natively. Thank you!
 
-## 📦 Installation
+## Installation
 ### Arch Linux
-Available in the [AUR](https://aur.archlinux.org/packages/wl-freeze-git). (Maintained by [Aethar](https://github.com/Aethar01))
+Available in the AUR:
+- [wl-freeze-git](https://aur.archlinux.org/packages/wl-freeze-git)
+- [wl-freeze](https://aur.archlinux.org/packages/wl-freeze)
+
+(Contact their respective maintainers if there are issues with the PKGBUILDs)
 
 ### NixOS
 Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=wl-freeze).
@@ -44,9 +53,10 @@ Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=
 **Dependencies**
 - `jq` to parse JSON
 - `psmisc` contains `pstree` which is required to list child processes
-- `xdotool` to find the PID of XWayland windows created via `xwayland-satellite` (Mainly for **Niri**)
-- `libnotify` for desktop notifications (Optional)
-- `kdotool` for KWin support (Optional)
+- `libnotify` for desktop notifications 
+- `xdotool` to find the PID of XWayland windows created via `xwayland-satellite`, as well as a fallback method for XWayland window detection
+- `kdotool` to find the PID of windows in KWin (KDE Plasma)
+- `qdbus6`/`qttols` for interacting windows and workspaces in KWin (KDE Plasma)
 
 **Symlink script**
 
@@ -85,7 +95,7 @@ sudo ln -s $(pwd)/completions/fish/wl-freeze.fish /usr/share/fish/completions/
 </details> 
 
 
-## 🧰 Usage
+## Usage
 
 ### Bind it in your compositor
 ```sh
@@ -127,17 +137,13 @@ wl-freeze -n eldenring.exe
 wl-freeze -c "hyprprop | jq '.pid'"
 ```
 
-## 🐛 Known issues
-- **When pausing native games**: System audio may stop when pausing Linux native games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
+## Known issues
+- **When pausing XWayland**: Pausing XWayland games (no Proton Wayland or Gamescope) will stop the mouse from working in other XWayland apps like Steam. 
+  - **workaround**: A workaround has already been implemented in the script to quickly switch workspaces back and forth before pausing the target window in order to release the mouse capture. This needs to be implemented differently for each compositor, so some of them may not support it yet.
+- **When pausing native games**: System audio may stop when pausing native Linux games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
   - **workaround**: Run the game with the env variable: `ALSOFT_DRIVERS=pulse`
 
-- **When pausing XWayland**: Pausing XWayland games (no Gamescope or Proton Wayland) may stop the mouse from working in other XWayland apps like Discord. 
-  - **workaround**: A mouse capture release has been implemented that quickly switches workspaces before pausing the window, but this may not be implemented for all compositors right now. Please open an issue to help support your compositor too! See below:
-    - Hyprland: Implemented ✅
-    - Sway: Not implemented ❌
-    - Niri: Implemented ✅
-
-## 📜 FAQ
+## FAQ
 - **Q:** How is this better than just sending SIGSTOP and SIGCONT signals manually?
 
   - **A:** Obviously, it's way more ergonomic. But what actually makes it better is: 
