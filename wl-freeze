@@ -38,7 +38,7 @@ Usage: wl-freeze (-a | -p <pid> | -n <name> | -c <command>) [options]
 
 Utility to suspend a game process (and other programs) in Wayland compositors.
 
-Supported compositors: hyprland, sway, niri, KWin (kde)
+Supported compositors: Hyprland, KWin (KDE Plasma), Niri, Sway
 
 Options:
   -h, --help            show help message
@@ -153,21 +153,6 @@ function releaseMouseCapture() {
       hyprctl dispatch workspace "$other_workspace" >/dev/null
       hyprctl dispatch workspace "$current_ws" >/dev/null
       ;;
-
-    niri)
-      current_ws=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == true) | .idx')
-      other_workspace=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == false) | .idx' | head -1)
-
-      if [[ -n "$other_workspace" ]]; then
-        debugPrint "Switching workspace $current_ws -> $other_workspace -> $current_ws"
-        niri msg action focus-workspace "$other_workspace"
-        niri msg action focus-workspace "$current_ws"
-      else
-        debugPrint "No other workspace - using focus-workspace-down/up"
-        niri msg action focus-workspace-down
-        niri msg action focus-workspace-up
-      fi
-      ;;
     kde|plasma)
       local qdbus
       for qdbus in qdbus6 qdbus-qt6 qdbus; do command -v "$qdbus" >/dev/null 2>&1 && break; done
@@ -190,12 +175,23 @@ function releaseMouseCapture() {
       debugPrint "Switching workspace $cur -> $nxt -> $cur"
       $qdbus org.kde.KWin /KWin org.kde.KWin.previousDesktop >/dev/null
       ;;
-    sway)
-      debugPrint "Sway - no XWayland mouse capture release implemented"
+    niri)
+      current_ws=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == true) | .idx')
+      other_workspace=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == false) | .idx' | head -1)
+
+      if [[ -n "$other_workspace" ]]; then
+        debugPrint "Switching workspace $current_ws -> $other_workspace -> $current_ws"
+        niri msg action focus-workspace "$other_workspace"
+        niri msg action focus-workspace "$current_ws"
+      else
+        debugPrint "No other workspace - using focus-workspace-down/up"
+        niri msg action focus-workspace-down
+        niri msg action focus-workspace-up
+      fi
       ;;
 
     *)
-      debugPrint "Compositor '$DESKTOP' not implemented for XWayland mouse capture release"
+      debugPrint "No XWayland mouse capture release implemented yet for $DESKTOP"
       ;;
   esac
 }
@@ -210,15 +206,9 @@ function getPidByActive() {
     hyprland)
       PID=$(hyprctl activewindow -j | jq '.pid')
       ;;
-
-    sway)
-      PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
-      ;;
-
     kde|plasma)
       PID=$(kdotool getactivewindow getwindowpid)
       ;;
-
     niri)
       local raw_pid proc_name
       raw_pid=$(niri msg --json focused-window | jq '.pid')
@@ -236,6 +226,9 @@ function getPidByActive() {
         PID=$raw_pid
         debugPrint "Native Wayland window ($proc_name), PID: $PID"
       fi
+      ;;
+    sway)
+      PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
       ;;
 
     "")
