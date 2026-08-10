@@ -102,13 +102,16 @@ sudo ln -s $(pwd)/completions/fish/wl-freeze.fish /usr/share/fish/completions/
 # Hyprland
 bind = , PAUSE, exec, wl-freeze -a
 
-# Sway
-bindsym Pause exec wl-freeze -a
+# KDE Plasma
+## Settings -> Keyboard -> Shortcuts -> Add New (Command or Script...) -> Add a script that launches `wl-freeze -a`
 
 # Niri
 binds {
     Mod+Pause { spawn "wl-freeze" "-a"; }
 }
+
+# Sway
+bindsym Pause exec wl-freeze -a
 ```
 
 ### Available flags
