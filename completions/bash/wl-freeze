@@ -27,7 +27,7 @@ _wl_freeze()
 
     if [[ $cur == -* ]]; then
         COMPREPLY=($(compgen -W "-h --help -a --active -p --pid -n --name -c --custom \
-            -s --silent -t --notif-timeout --dry-run --debug --no-xorg-workaround" -- "$cur"))
+            -s --silent -t --notif-timeout --dry-run --debug --no-xwayland-mouse-release" -- "$cur"))
     else
         # When no option is specified, suggest main operation flags
         COMPREPLY=($(compgen -W "-a -p -n -c" -- "$cur"))

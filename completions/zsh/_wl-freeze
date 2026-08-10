@@ -21,7 +21,7 @@ _wl-freeze() {
         '--notif-timeout[notification timeout in milliseconds]:timeout:('1000' '2000' '3000' '5000' '10000')' \
         '--dry-run[does not actually suspend/resume a process]' \
         '--debug[enable debug mode]' \
-        '--no-xorg-workaround[skip the XWayland mouse capture workaround]'
+        '--no-xwayland-mouse-release[skip the XWayland mouse capture release]'
 
     return 0
 }
