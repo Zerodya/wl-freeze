@@ -91,9 +91,14 @@ function isXWaylandWindow() {
 
   case "$DESKTOP" in
     hyprland)
+      # Check for xwayland in hyprctl output
       result=$(hyprctl activewindow -j 2>/dev/null | jq -r '.xwayland')
       ;;
+    kde|plasma)
+      # No compositor specific detection implemented...
+      ;;
     niri)
+      # Check for xwayland-(satellite) in the process
       local niri_pid
       niri_pid=$(niri msg --json focused-window 2>/dev/null | jq '.pid')
       if [[ -n "$niri_pid" ]] && [[ "$niri_pid" != "null" ]]; then
@@ -104,18 +109,17 @@ function isXWaylandWindow() {
         fi
       fi
       ;;
-    kde|plasma)
-      if command -v xdotool >/dev/null 2>&1; then
-        if xdotool getactivewindow getwindowpid >/dev/null 2>&1; then
-          result="true"
-        fi
-      fi
-      ;;
     sway)
-      # TODO: Determine if Sway needs this workaround
-      result="false"
+      # No compositor specific detection implemented...
       ;;
   esac
+
+  # Universal xdotool fallback if native method isn't working or isn't implemented
+  if [[ "$result" != "true" ]] && command -v xdotool >/dev/null 2>&1; then
+    if xdotool getactivewindow getwindowpid >/dev/null 2>&1; then
+      result="true"
+    fi
+  fi
 
   [[ "$result" == "true" ]]
 }
