@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/7ffdfde5-2028-4936-b61c-092b2cf224c3
 - **Hyprland**
 - **Sway**
 - **Niri**
+- **KWin (kde)**
 
 ### Unsupported compositors
 
@@ -45,6 +46,7 @@ Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=
 - `psmisc` contains `pstree` which is required to list child processes
 - `xdotool` to find the PID of XWayland windows created via `xwayland-satellite` (Mainly for **Niri**)
 - `libnotify` for desktop notifications (Optional)
+- `kdotool` for KWin support (Optional)
 
 **Symlink script**
 

@@ -38,7 +38,7 @@ Usage: wl-freeze (-a | -p <pid> | -n <name> | -c <command>) [options]
 
 Utility to suspend a game process (and other programs) in Wayland compositors.
 
-Supported compositors: hyprland, sway, niri
+Supported compositors: hyprland, sway, niri, KWin (kde)
 
 Options:
   -h, --help            show help message
@@ -104,6 +104,13 @@ function isXWaylandWindow() {
         fi
       fi
       ;;
+    kde|plasma)
+      if command -v xdotool >/dev/null 2>&1; then
+        if xdotool getactivewindow getwindowpid >/dev/null 2>&1; then
+          result="true"
+        fi
+      fi
+      ;;
     sway)
       # TODO: Determine if Sway needs this workaround
       result="false"
@@ -157,7 +164,28 @@ function releaseMouseCapture() {
         niri msg action focus-workspace-up
       fi
       ;;
+    kde|plasma)
+      local qdbus
+      for qdbus in qdbus6 qdbus-qt6 qdbus; do command -v "$qdbus" >/dev/null 2>&1 && break; done
+      [[ -n "$qdbus" ]] || { debugPrint "No qdbus found"; return 1; }
 
+      # Unfullscreen first since Plasma glitches when switching to a frozen fullscreen game
+      local f=$(mktemp --suffix=.js) id
+      printf 'workspace.activeWindow.fullScreen = false;\n' > "$f"
+      id=$($qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$f" "wlf_$$" 2>/dev/null) &&
+        $qdbus org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null 2>&1
+      rm -f "$f"
+
+      local cur=$($qdbus org.kde.KWin /KWin org.kde.KWin.currentDesktop 2>/dev/null)
+      [[ -n "$cur" ]] || { debugPrint "No current desktop"; return 1; }
+
+      $qdbus org.kde.KWin /KWin org.kde.KWin.nextDesktop >/dev/null
+      local nxt=$($qdbus org.kde.KWin /KWin org.kde.KWin.currentDesktop 2>/dev/null)
+      [[ "$nxt" != "$cur" ]] || { debugPrint "No other workspace"; return 1; }
+
+      debugPrint "Switching workspace $cur -> $nxt -> $cur"
+      $qdbus org.kde.KWin /KWin org.kde.KWin.previousDesktop >/dev/null
+      ;;
     sway)
       debugPrint "Sway - no XWayland mouse capture release implemented"
       ;;
@@ -181,6 +209,10 @@ function getPidByActive() {
 
     sway)
       PID=$(swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .pid')
+      ;;
+
+    kde|plasma)
+      PID=$(kdotool getactivewindow getwindowpid)
       ;;
 
     niri)
