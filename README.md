@@ -52,7 +52,6 @@ Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=
 ### Manual
 **Dependencies**
 - `jq` to parse JSON
-- `psmisc` contains `pstree` which is required to list child processes
 - `libnotify` for desktop notifications 
 - `xdotool` to find the PID of XWayland windows created via `xwayland-satellite`, as well as a fallback method for XWayland window detection
 - `kdotool` to find the PID of windows in KWin (KDE Plasma)
