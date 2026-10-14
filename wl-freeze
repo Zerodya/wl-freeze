@@ -32,6 +32,10 @@ function debugPrint() {
   fi
 }
 
+function has() {
+  command -v "$1" >/dev/null 2>&1
+}
+
 function printHelp() {
   cat <<'EOF'
 Usage: wl-freeze (-a | -p <pid> | -n <name> | -c <command>) [options]
@@ -81,119 +85,6 @@ function detectCompositor() {
   DESKTOP="${DESKTOP%-uwsm}"
 
   debugPrint "Compositor: ${DESKTOP:-<unknown>}"
-}
-
-# ---------------------------------------------------------------------------
-# XWayland detection
-# ---------------------------------------------------------------------------
-function isXWaylandWindow() {
-  local result="false"
-
-  case "$DESKTOP" in
-    hyprland)
-      # Check for xwayland in hyprctl output
-      result=$(hyprctl activewindow -j 2>/dev/null | jq -r '.xwayland')
-      ;;
-    kde|plasma)
-      # No compositor specific detection implemented...
-      ;;
-    niri)
-      # Check for xwayland-(satellite) in the process
-      local niri_pid
-      niri_pid=$(niri msg --json focused-window 2>/dev/null | jq '.pid')
-      if [[ -n "$niri_pid" ]] && [[ "$niri_pid" != "null" ]]; then
-        local proc_name
-        proc_name=$(ps -p "$niri_pid" -o comm= 2>/dev/null)
-        if [[ "$proc_name" == *"xwayland-"* ]]; then
-          result="true"
-        fi
-      fi
-      ;;
-    sway)
-      # No compositor specific detection implemented...
-      ;;
-  esac
-
-  # Universal xdotool fallback if native method isn't working or isn't implemented
-  if [[ "$result" != "true" ]] && command -v xdotool >/dev/null 2>&1; then
-    if xdotool getactivewindow getwindowpid >/dev/null 2>&1; then
-      result="true"
-    fi
-  fi
-
-  [[ "$result" == "true" ]]
-}
-
-# ---------------------------------------------------------------------------
-# XWayland mouse capture release
-# ---------------------------------------------------------------------------
-function releaseMouseCapture() {
-  if [[ $NO_XWAYLAND_MOUSE_RELEASE == "1" ]]; then
-    debugPrint "XWayland mouse capture release disabled, skipping"
-    return 0
-  fi
-
-  isXWaylandWindow || return 0
-
-  debugPrint "XWayland window detected - releasing mouse capture via workspace switch..."
-
-  local current_ws other_workspace
-
-  case "$DESKTOP" in
-    hyprland)
-      current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
-      other_workspace=$(hyprctl workspaces -j | jq -r '.[] | select(.id != '"$current_ws"') | .id' | head -1)
-
-      if [[ -z "$other_workspace" ]]; then
-        debugPrint "No other workspace available"
-        return 1
-      fi
-
-      debugPrint "Switching workspace $current_ws -> $other_workspace -> $current_ws"
-      hyprctl dispatch workspace "$other_workspace" >/dev/null
-      hyprctl dispatch workspace "$current_ws" >/dev/null
-      ;;
-    kde|plasma)
-      local qdbus
-      for qdbus in qdbus6 qdbus-qt6 qdbus; do command -v "$qdbus" >/dev/null 2>&1 && break; done
-      [[ -n "$qdbus" ]] || { debugPrint "No qdbus found"; return 1; }
-
-      # Unfullscreen first since Plasma glitches when switching to a frozen fullscreen game
-      local f=$(mktemp --suffix=.js) id
-      printf 'workspace.activeWindow.fullScreen = false;\n' > "$f"
-      id=$($qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$f" "wlf_$$" 2>/dev/null) &&
-        $qdbus org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null 2>&1
-      rm -f "$f"
-
-      local cur=$($qdbus org.kde.KWin /KWin org.kde.KWin.currentDesktop 2>/dev/null)
-      [[ -n "$cur" ]] || { debugPrint "No current desktop"; return 1; }
-
-      $qdbus org.kde.KWin /KWin org.kde.KWin.nextDesktop >/dev/null
-      local nxt=$($qdbus org.kde.KWin /KWin org.kde.KWin.currentDesktop 2>/dev/null)
-      [[ "$nxt" != "$cur" ]] || { debugPrint "No other workspace"; return 1; }
-
-      debugPrint "Switching workspace $cur -> $nxt -> $cur"
-      $qdbus org.kde.KWin /KWin org.kde.KWin.previousDesktop >/dev/null
-      ;;
-    niri)
-      current_ws=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == true) | .idx')
-      other_workspace=$(niri msg --json workspaces | jq -r '.[] | select(.is_active == false) | .idx' | head -1)
-
-      if [[ -n "$other_workspace" ]]; then
-        debugPrint "Switching workspace $current_ws -> $other_workspace -> $current_ws"
-        niri msg action focus-workspace "$other_workspace"
-        niri msg action focus-workspace "$current_ws"
-      else
-        debugPrint "No other workspace - using focus-workspace-down/up"
-        niri msg action focus-workspace-down
-        niri msg action focus-workspace-up
-      fi
-      ;;
-
-    *)
-      debugPrint "No XWayland mouse capture release implemented yet for $DESKTOP"
-      ;;
-  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -369,9 +260,38 @@ function getDescendants() {
   done
 }
 
-function toggleFreeze() {
-  local should_release=$1
+# A frozen X client keeps any pointer grab it holds, so the mouse stops working
+# in every other XWayland window. Wine/Proton grab through an InputOnly,
+# override-redirect "clip window": the X server drops a grab when its window is
+# unmapped, and Wine maps it again by itself once resumed and focused.
+# ponytail: unmaps every such window, not just the frozen game's (harmless for
+# Wine, which remaps on its next ClipCursor). Native X11 games grabbing their
+# own toplevel aren't covered.
+function releaseMouseCapture() {
+  if (( NO_XWAYLAND_MOUSE_RELEASE )); then
+    debugPrint "XWayland mouse capture release disabled, skipping"
+    return 0
+  fi
 
+  if [[ -z "${DISPLAY:-}" ]] || ! has xwininfo || ! has xdotool; then
+    debugPrint "No X display or xwininfo/xdotool missing, skipping XWayland mouse capture release"
+    return 0
+  fi
+
+  local win
+  for win in $(xwininfo -root -children 2>/dev/null | awk '/^ +0x/ {print $1}'); do
+    if xwininfo -id "$win" 2>/dev/null | awk '
+        /Class: InputOnly/              {class = 1}
+        /Map State: IsViewable/         {mapped = 1}
+        /Override Redirect State: yes/  {override = 1}
+        END {exit !(class && mapped && override)}'; then
+      debugPrint "Unmapping clip window $win"
+      xdotool windowunmap "$win"
+    fi
+  done
+}
+
+function toggleFreeze() {
   if [[ $DRYRUN == "1" ]]; then
     debugPrint "Dry-run: skipping suspend/resume"
     return 0
@@ -413,13 +333,10 @@ function toggleFreeze() {
     kill -0 "$PID" 2>/dev/null || die "Failed to resume $proc_name (PID $PID)"
     echo "Resumed $proc_name (PID $PID)"
   else
-    if [[ "$should_release" == "1" ]]; then
-      releaseMouseCapture
-    fi
-
     debugPrint "Suspending processes..."
     kill -STOP "${pid_array[@]}" 2>/dev/null
     kill -0 "$PID" 2>/dev/null || die "Failed to suspend $proc_name (PID $PID)"
+    releaseMouseCapture
     echo "Suspended $proc_name (PID $PID)"
   fi
 }
@@ -483,12 +400,9 @@ function main() {
   args "$@"
   debugPrint "Starting wl-freeze..."
 
-  local should_release=0
-
   if [[ "$FLAG_ACTIVE" == "1" ]]; then
     detectCompositor
     getPidByActive
-    should_release=1
   elif [[ -n "$FLAG_PID" ]]; then
     getPidByPid "$FLAG_PID"
   elif [[ -n "$FLAG_NAME" ]]; then
@@ -497,7 +411,7 @@ function main() {
     getPidByCustom "$FLAG_CUSTOM"
   fi
 
-  toggleFreeze "$should_release"
+  toggleFreeze
 
   if (( !SILENT )); then
     sendNotification
