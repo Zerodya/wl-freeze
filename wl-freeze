@@ -312,7 +312,7 @@ function getPidByName() {
   if ! pidof -x "$1" >/dev/null 2>&1; then
     die "Process name '$1' not found"
   fi
-  PID=$(pidof "$1" | awk '{print $NF}')
+  PID=$(pidof -x "$1" | awk '{print $NF}')
   debugPrint "PID: $PID"
 }
 
