@@ -17,6 +17,7 @@ declare DESKTOP=""
 declare PID=""
 declare PROC_NAME=""
 declare ACTION=""    # Suspended | Resumed
+declare AUDIO_LINKS_FILE=""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -249,6 +250,41 @@ function releaseMouseCapture() {
   done
 }
 
+# Clients using libpipewire directly (Proton, native games via pipewire-alsa)
+# run their audio nodes inside the frozen process. The graph then waits on them
+# every cycle and audio stops for everything on the same device. Unlinking the
+# nodes takes them out of the graph; the links are saved to be restored on resume.
+function detachAudio() {
+  if ! has pw-dump || ! has pw-cli; then
+    debugPrint "pw-dump/pw-cli missing, skipping audio detach"
+    return 0
+  fi
+
+  local pids_json link out_port in_port
+  pids_json="[$(IFS=,; echo "$*")]"
+
+  while read -r link out_port in_port; do
+    debugPrint "Unlinking PipeWire link $link ($out_port -> $in_port)"
+    pw-cli destroy "$link" >/dev/null 2>&1 && echo "$out_port $in_port"
+  done >"$AUDIO_LINKS_FILE" < <(pw-dump 2>/dev/null | jq -r --argjson pids "$pids_json" '
+    [.[] | select(.type == "PipeWire:Interface:Client" and (.info.props["pipewire.sec.pid"] as $p | $pids | index($p))) | .id] as $clients
+    | [.[] | select(.type == "PipeWire:Interface:Node" and (.info.props["client.id"] as $c | $clients | index($c))) | .id] as $nodes
+    | .[] | select(.type == "PipeWire:Interface:Link")
+    | select([.info["output-node-id"], .info["input-node-id"]] | any(. as $n | $nodes | index($n)))
+    | "\(.id) \(.info["output-port-id"]) \(.info["input-port-id"])"')
+}
+
+function reattachAudio() {
+  [[ -f "$AUDIO_LINKS_FILE" ]] || return 0
+
+  local out_port in_port
+  while read -r out_port in_port; do
+    debugPrint "Relinking PipeWire ports $out_port -> $in_port"
+    pw-link "$out_port" "$in_port" >/dev/null 2>&1
+  done <"$AUDIO_LINKS_FILE"
+  rm -f "$AUDIO_LINKS_FILE"
+}
+
 function toggleFreeze() {
   local state signal
   read -r state < <(ps -p "$PID" -o state= 2>/dev/null)
@@ -267,6 +303,8 @@ function toggleFreeze() {
     return 0
   fi
 
+  AUDIO_LINKS_FILE="${XDG_RUNTIME_DIR:-/tmp}/wl-freeze-$PID.links"
+
   local -a pids
   mapfile -t pids < <(echo "$PID"; getDescendants "$PID")
   debugPrint "Process tree PIDs: ${pids[*]}"
@@ -283,7 +321,10 @@ function toggleFreeze() {
   fi
 
   if [[ "$signal" == STOP ]]; then
+    detachAudio "${pids[@]}"
     releaseMouseCapture
+  else
+    reattachAudio
   fi
 
   echo "$ACTION $PROC_NAME (PID $PID)"
