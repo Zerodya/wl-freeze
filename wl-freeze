@@ -301,7 +301,7 @@ EOF
 
 function getPidByPid() {
   debugPrint "Getting PID by argument: $1"
-  if ! ps -p "$1" >/dev/null 2>&1; then
+  if ! [[ "$1" =~ ^[0-9]+$ ]] || ! ps -p "$1" >/dev/null 2>&1; then
     die "Process ID $1 not found"
   fi
   PID=$1
@@ -460,7 +460,7 @@ function args() {
       -n|--name)      ((required_count++)); shift; FLAG_NAME=$1 ;;
       -c|--custom)    ((required_count++)); shift; FLAG_CUSTOM=$1 ;;
       -s|--silent)    SILENT=1 ;;
-      -t|--notif-timeout) shift; NOTIF_TIMEOUT=$1 ;;
+      -t|--notif-timeout) shift; [[ "$1" =~ ^[0-9]+$ ]] || die "Invalid notification timeout: $1"; NOTIF_TIMEOUT=$1 ;;
       --dry-run)      DRYRUN=1 ;;
       --debug)        DEBUG=1 ;;
       --no-xwayland-mouse-release) NO_XWAYLAND_MOUSE_RELEASE=1 ;;
