@@ -20,12 +20,12 @@ https://github.com/user-attachments/assets/7ffdfde5-2028-4936-b61c-092b2cf224c3
 >
 > Pausing XWayland windows is possible, but it may not be the best experience and we have to use workarounds for that. Check [Known issues](#known-issues) to learn more.
 
-| Compositor | XWayland workaround | Notes | Contributors |
-|------------|-------------|-------|-------------|
-| **Hyprland** | ✅ Implemented |  |  |
-| **KDE Plasma** | ✅ Implemented | We also unfullscreen the game because Plasma glitches when trying to switch to a workspace containing a frozen window in fullscreen | [@ExistingPerson08](https://github.com/ExistingPerson08) |
-| **Niri** | ✅ Implemented | Assumes Niri + xwayland-satellite setup for XWayland games |  |
-| **Sway** | ⚠️ Not yet implemented |  | [@alterNERDtive](https://github.com/alterNERDtive) |
+| Compositor | Notes | Contributors |
+|------------|-------|-------------|
+| **Hyprland** |  |  |
+| **KDE Plasma** |  | [@ExistingPerson08](https://github.com/ExistingPerson08) |
+| **Niri** | Assumes Niri + xwayland-satellite setup for XWayland games |  |
+| **Sway** |  | [@alterNERDtive](https://github.com/alterNERDtive) |
 
 ### Other compositors
 
@@ -53,9 +53,9 @@ Available in [nixpkgs](https://search.nixos.org/packages?channel=unstable&query=
 **Dependencies**
 - `jq` to parse JSON
 - `libnotify` for desktop notifications 
-- `xdotool` to find the PID of XWayland windows created via `xwayland-satellite`, as well as a fallback method for XWayland window detection
+- `xdotool` to find the PID of XWayland windows created via `xwayland-satellite`, and to release the mouse capture of frozen XWayland games
+- `xwininfo` (`xorg-xwininfo`/`x11-utils`) to find the window holding the mouse capture of frozen XWayland games
 - `kdotool` to find the PID of windows in KWin (KDE Plasma)
-- `qdbus6`/`qttols` for interacting windows and workspaces in KWin (KDE Plasma)
 
 **Symlink script**
 
@@ -141,7 +141,7 @@ wl-freeze -c "hyprprop | jq '.pid'"
 
 ## Known issues
 - **When pausing XWayland**: Pausing XWayland games (no Proton Wayland or Gamescope) will stop the mouse from working in other XWayland apps like Steam. 
-  - **workaround**: A workaround has already been implemented in the script to quickly switch workspaces back and forth before pausing the target window in order to release the mouse capture. This needs to be implemented differently for each compositor, so some of them may not support it yet.
+  - **workaround**: After freezing, the script unmaps the invisible window Wine/Proton uses to capture the mouse, which makes XWayland release it. Wine maps it again by itself after resuming. This works on every compositor, but native X11 games (no Proton/Wine) are not covered.
 - **When pausing native games**: System audio may stop when pausing native Linux games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
   - **workaround**: Run the game with the env variable: `ALSOFT_DRIVERS=pulse`
 
@@ -151,7 +151,7 @@ wl-freeze -c "hyprprop | jq '.pid'"
   - **A:** Obviously, it's way more ergonomic. But what actually makes it better is: 
     1. A **robust freezing logic** that captures and stops the entire process tree to suspend the game properly. Using SIGSTOP on just the parent process will give you issues in most games, like audio and game logic still playing in the background. This is true especially when using `gamescope`.
     2. Ways to get the **actual game PID** when using things like `xwayland-satellite` that hide the real game PID.
-    3. A **mouse capture release** before pausing XWayland windows. If you freeze a XWayland game while the mouse cursor is still inside the game window, you're going to trap it and mouse input will stop working in other XWayland windows too.
+    3. A **mouse capture release** when pausing XWayland windows. If you freeze a XWayland game while the mouse cursor is still inside the game window, you're going to trap it and mouse input will stop working in other XWayland windows too.
 
 - **Q:** Why Bash and not a more robust language?
 
