@@ -408,22 +408,19 @@ function toggleFreeze() {
 
   if [[ "$state" == T ]]; then
     debugPrint "Resuming processes..."
-    if kill -CONT "${pid_array[@]}" 2>/dev/null; then
-      echo "Resumed $proc_name (PID $PID)"
-    else
-      die "Failed to resume $proc_name (PID $PID)"
-    fi
+    # Children may exit between the snapshot and the kill, so only the root counts
+    kill -CONT "${pid_array[@]}" 2>/dev/null
+    kill -0 "$PID" 2>/dev/null || die "Failed to resume $proc_name (PID $PID)"
+    echo "Resumed $proc_name (PID $PID)"
   else
     if [[ "$should_release" == "1" ]]; then
       releaseMouseCapture
     fi
 
     debugPrint "Suspending processes..."
-    if kill -STOP "${pid_array[@]}" 2>/dev/null; then
-      echo "Suspended $proc_name (PID $PID)"
-    else
-      die "Failed to suspend $proc_name (PID $PID)"
-    fi
+    kill -STOP "${pid_array[@]}" 2>/dev/null
+    kill -0 "$PID" 2>/dev/null || die "Failed to suspend $proc_name (PID $PID)"
+    echo "Suspended $proc_name (PID $PID)"
   fi
 }
 
