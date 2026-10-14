@@ -199,6 +199,34 @@ function releaseMouseCapture() {
 # ---------------------------------------------------------------------------
 # getPid functions
 # ---------------------------------------------------------------------------
+# _NET_WM_PID is relative to the client's PID namespace, so for sandboxed
+# clients (Proton's pressure-vessel, Flatpak) it isn't the host PID and may
+# point at an unrelated process. Map it back through NSpid in /proc.
+function resolveNamespacedPid() {
+  local wm_pid=$1
+  local -a candidates=()
+  local file
+
+  # The host process with that PID, unless it's a kernel thread (empty cmdline)
+  if [[ -n $(tr -d '\0' 2>/dev/null <"/proc/$wm_pid/cmdline") ]]; then
+    candidates+=("$wm_pid")
+  fi
+
+  # Sandboxed processes whose innermost PID matches
+  while IFS= read -r file; do
+    file=${file#/proc/}
+    candidates+=("${file%/status}")
+  done < <(grep -lE "^NSpid:([[:space:]]+[0-9]+)+[[:space:]]+$wm_pid\$" /proc/[0-9]*/status 2>/dev/null)
+
+  debugPrint "Candidates for _NET_WM_PID $wm_pid: ${candidates[*]:-none}"
+
+  case ${#candidates[@]} in
+    1) PID=${candidates[0]} ;;
+    0) die "No process found for _NET_WM_PID $wm_pid" ;;
+    *) die "_NET_WM_PID $wm_pid is ambiguous (host PIDs: ${candidates[*]}), use -p instead" ;;
+  esac
+}
+
 function getPidByActive() {
   debugPrint "Getting PID by active window..."
 
@@ -216,12 +244,14 @@ function getPidByActive() {
 
       if [[ "$proc_name" == *"xwayland"* ]]; then
         debugPrint "xwayland-satellite wrapper detected ($proc_name), querying xdotool for real PID..."
-        PID=$(xdotool getactivewindow getwindowpid 2>/dev/null)
+        local wm_pid
+        wm_pid=$(xdotool getactivewindow getwindowpid 2>/dev/null)
 
-        if [[ -z "$PID" ]] || [[ "$PID" == "0" ]]; then
+        if ! [[ "$wm_pid" =~ ^[1-9][0-9]*$ ]]; then
           die "xdotool returned invalid PID. Is xdotool installed and an XWayland window focused?"
         fi
-        debugPrint "xdotool PID: $PID (wrapper was $raw_pid)"
+        debugPrint "xdotool PID: $wm_pid (wrapper was $raw_pid)"
+        resolveNamespacedPid "$wm_pid"
       else
         PID=$raw_pid
         debugPrint "Native Wayland window ($proc_name), PID: $PID"
