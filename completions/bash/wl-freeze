@@ -10,8 +10,8 @@ _wl_freeze()
             return
             ;;
         -n|--name)
-            # Complete with process names
-            COMPREPLY=($(compgen -W "$(ps -e --no-headers -o comm | sort -u | tr '\n' ' ')" -- "$cur"))
+            # Complete with process names and argv[0] basenames, which is what -n matches
+            COMPREPLY=($(compgen -W "$(awk 'BEGIN { RS = "\0" } FNR == 1 { n = split($0, p, "/"); n = split(p[n], p, sprintf("%c", 92)); print p[n]; f = FILENAME; sub(/cmdline$/, "comm", f); if ((getline c < f) > 0) { sub(/\n$/, "", c); print c }; close(f) }' /proc/[0-9]*/cmdline 2>/dev/null | sort -u)" -- "$cur"))
             return
             ;;
         -c|--custom)
