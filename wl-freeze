@@ -171,6 +171,23 @@ EOF
 function getPidByName() {
   debugPrint "Getting PID by name: $1"
   PID=$(pidof -x "$1" | awk '{print $NF}')
+
+  # pidof only matches argv[0] split on '/'. Also match the process name (as
+  # shown by top/htop) and Wine/Proton's Windows-path argv[0] by its basename.
+  # Kernel threads have an empty cmdline and are skipped.
+  if [[ -z "$PID" ]]; then
+    local dir argv0 comm
+    for dir in /proc/[0-9]*; do
+      IFS= read -r -d '' argv0 2>/dev/null <"$dir/cmdline" || continue
+      read -r comm 2>/dev/null <"$dir/comm" || continue
+      [[ "$comm" == "$1" || "${argv0##*\\}" == "$1" ]] || continue
+      dir=${dir#/proc/}
+      if [[ -z "$PID" ]] || (( dir < PID )); then
+        PID=$dir
+      fi
+    done
+  fi
+
   if [[ -z "$PID" ]]; then
     die "Process name '$1' not found"
   fi
