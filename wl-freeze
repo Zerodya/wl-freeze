@@ -238,9 +238,11 @@ function getDescendants() {
 
 # A frozen X client keeps any pointer grab it holds, so the mouse stops working
 # in every other XWayland window. Wine/Proton grab through an InputOnly,
-# override-redirect "clip window": the X server drops a grab when its window is
-# unmapped, and Wine maps it again by itself once resumed and focused.
-# ponytail: unmaps every such window, not just the frozen game's (harmless for
+# override-redirect "clip window" with no WM_CLASS (other InputOnly windows of
+# a game must be left alone, Wine dies on resume if they get unmapped). The X
+# server drops a grab when its window is unmapped, and Wine maps it again by
+# itself once resumed and focused.
+# ponytail: unmaps every clip window, not just the frozen game's (harmless for
 # Wine, which remaps on its next ClipCursor). Native X11 games grabbing their
 # own toplevel aren't covered.
 function releaseMouseCapture() {
@@ -254,16 +256,22 @@ function releaseMouseCapture() {
     return 0
   fi
 
-  local win
+  local win wm_class
   for win in $(xwininfo -root -children 2>/dev/null | awk '/^ +0x/ {print $1}'); do
-    if xwininfo -id "$win" 2>/dev/null | awk '
-        /Class: InputOnly/              {class = 1}
-        /Map State: IsViewable/         {mapped = 1}
-        /Override Redirect State: yes/  {override = 1}
-        END {exit !(class && mapped && override)}'; then
-      debugPrint "Unmapping clip window $win"
-      xdotool windowunmap "$win"
+    xwininfo -id "$win" 2>/dev/null | awk '
+      /Class: InputOnly/              {class = 1}
+      /Map State: IsViewable/         {mapped = 1}
+      /Override Redirect State: yes/  {override = 1}
+      END {exit !(class && mapped && override)}' || continue
+
+    wm_class=$(xdotool getwindowclassname "$win" 2>/dev/null)
+    if [[ -n "$wm_class" && "$wm_class" != "(null)" ]]; then
+      debugPrint "Skipping InputOnly window $win of $wm_class"
+      continue
     fi
+
+    debugPrint "Unmapping clip window $win"
+    xdotool windowunmap "$win"
   done
 }
 
