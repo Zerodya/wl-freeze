@@ -16,16 +16,13 @@ https://github.com/user-attachments/assets/7ffdfde5-2028-4936-b61c-092b2cf224c3
 > But in Wayland **each compositor has its own way** to extract the PID from the currently focused window, so this script relies on **people like you** to add support to new compositors. See how below!
 
 ## Supported compositors
-> **NOTE:** Playing via **Wayland** (Proton Wayland or Gamescope) is *HIGHLY RECOMMENDED.*
->
-> Pausing XWayland windows is possible, but it may not be the best experience and we have to use workarounds for that. Check [Known issues](#known-issues) to learn more.
 
-| Compositor | Notes | Contributors |
-|------------|-------|-------------|
-| **Hyprland** |  |  |
-| **KDE Plasma** |  | [@ExistingPerson08](https://github.com/ExistingPerson08) |
-| **Niri** | Assumes Niri + xwayland-satellite setup for XWayland games |  |
-| **Sway** |  | [@alterNERDtive](https://github.com/alterNERDtive) |
+| Compositor | Contributors |
+|------------| -------------|
+| **Hyprland** |  |
+| **KDE Plasma** | [@ExistingPerson08](https://github.com/ExistingPerson08) |
+| **Niri** |  |
+| **Sway** | [@alterNERDtive](https://github.com/alterNERDtive) |
 
 ### Other compositors
 
@@ -142,8 +139,6 @@ wl-freeze -c "hyprprop | jq '.pid'"
 ## Known issues
 - **When pausing XWayland**: Pausing XWayland games (no Proton Wayland or Gamescope) will stop the mouse from working in other XWayland apps like Steam. 
   - **workaround**: After freezing, the script unmaps the invisible window Wine/Proton uses to capture the mouse, which makes XWayland release it. Wine maps it again by itself after resuming. This works on every compositor, but native X11 games (no Proton/Wine) are not covered.
-- **When pausing native games**: System audio may stop when pausing native Linux games (no Proton/Wine) like Minecraft. This is a Pipewire [issue](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3509).
-  - **workaround**: Run the game with the env variable: `ALSOFT_DRIVERS=pulse`
 
 ## FAQ
 - **Q:** How is this better than just sending SIGSTOP and SIGCONT signals manually?
