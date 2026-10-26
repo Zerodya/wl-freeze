@@ -136,10 +136,6 @@ wl-freeze -n eldenring.exe
 wl-freeze -c "hyprprop | jq '.pid'"
 ```
 
-## Known issues
-- **When pausing XWayland**: Pausing XWayland games (no Proton Wayland or Gamescope) will stop the mouse from working in other XWayland apps like Steam. 
-  - **workaround**: After freezing, the script unmaps the invisible window Wine/Proton uses to capture the mouse, which makes XWayland release it. Wine maps it again by itself after resuming. This works on every compositor, but native X11 games (no Proton/Wine) are not covered.
-
 ## FAQ
 - **Q:** How is this better than just sending SIGSTOP and SIGCONT signals manually?
 
