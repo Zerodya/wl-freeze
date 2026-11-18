@@ -96,7 +96,7 @@ sudo ln -s $(pwd)/completions/fish/wl-freeze.fish /usr/share/fish/completions/
 ### Bind it in your compositor
 ```sh
 # Hyprland
-bind = , PAUSE, exec, wl-freeze -a
+hl.bind("PAUSE", hl.dsp.exec_cmd("wl-freeze -a"))
 
 # KDE Plasma
 ## Settings -> Keyboard -> Shortcuts -> Add New (Command or Script...) -> Add a script that launches `wl-freeze -a`
